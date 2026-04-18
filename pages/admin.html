@@ -258,6 +258,18 @@
     </div>
     <div class="modal-body">
       <input type="hidden" id="indicatorId"/>
+      <div id="indicatorTemplateSection" class="form-section">
+        <h4>Reutilizar un indicador existente</h4>
+        <div class="form-group" style="margin-bottom:10px">
+          <label class="form-label">Base opcional</label>
+          <select id="indicatorTemplateSelect" class="form-control"></select>
+          <div class="form-help">Copia nombre, unidad, clave comparable, descripción y configuración anual desde otro indicador. El destino no se copia para que lo asignes donde corresponda.</div>
+        </div>
+        <div class="inline-input-row">
+          <button class="btn btn-secondary btn-sm" type="button" onclick="applyIndicatorTemplate()">Copiar base</button>
+          <button class="btn btn-ghost btn-sm" type="button" onclick="clearIndicatorTemplateSelection()">Empezar desde cero</button>
+        </div>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Destino *</label>
@@ -849,10 +861,76 @@ function resetIndicatorForm() {
   document.getElementById('indFormulaMultiplier').value = '1';
   document.getElementById('indFormulaNumerator').dataset.current = '';
   document.getElementById('indFormulaDenominator').dataset.current = '';
+  document.getElementById('indicatorTemplateSelect').value = '';
+}
+
+function populateIndicatorTemplateSelect(selectedId = '') {
+  const select = document.getElementById('indicatorTemplateSelect');
+  const groups = new Map();
+  indicators.forEach(ind => {
+    const destinationName = ind.destination?.name || 'Sin destino';
+    if (!groups.has(destinationName)) groups.set(destinationName, []);
+    groups.get(destinationName).push(ind);
+  });
+
+  const groupHtml = [...groups.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], 'es'))
+    .map(([destinationName, items]) => {
+      const options = items
+        .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+        .map(ind => `<option value="${ind.id}">${escapeHtml(ind.name)}${ind.unit ? ` · ${escapeHtml(ind.unit)}` : ''}${getMetricKey(ind) ? ` · ${escapeHtml(getMetricKey(ind))}` : ''}</option>`)
+        .join('');
+      return `<optgroup label="${escapeHtml(destinationName)}">${options}</optgroup>`;
+    })
+    .join('');
+
+  select.innerHTML = `<option value="">Escribir todo desde cero</option>${groupHtml}`;
+  select.value = selectedId || '';
+}
+
+function applyIndicatorTemplate() {
+  const templateId = document.getElementById('indicatorTemplateSelect').value;
+  if (!templateId) {
+    toast('Seleccioná un indicador base o seguí cargando todo desde cero.', 'error');
+    return;
+  }
+
+  const template = indicators.find(ind => ind.id === templateId);
+  if (!template) {
+    toast('No encontré el indicador base seleccionado.', 'error');
+    return;
+  }
+
+  const destinationToKeep = document.getElementById('indDestination').value || (currentDestination?.id && currentDestination.id !== UNASSIGNED_DESTINATION_ID ? currentDestination.id : '');
+  document.getElementById('indName').value = template.name || '';
+  document.getElementById('indUnit').value = template.unit || '';
+  document.getElementById('indDesc').value = template.description || '';
+  document.getElementById('indMetricKey').value = getMetricKey(template);
+  document.getElementById('indAnnualChartVisible').checked = template.annual_chart_visible !== false;
+  document.getElementById('indFormulaMultiplier').value = template.formula_multiplier ?? 1;
+  document.getElementById('indFormulaNumerator').dataset.current = template.formula_numerator_key || '';
+  document.getElementById('indFormulaDenominator').dataset.current = template.formula_denominator_key || '';
+  populateAnnualModeSelect(template.annual_calc_mode || 'sum');
+  populateMetricControls(getMetricKey(template));
+  toggleFormulaFields();
+  populateDestinationSelect(destinationToKeep);
+  toast('Base copiada. Ahora ajustá el nombre o lo que necesites.', 'success');
+}
+
+function clearIndicatorTemplateSelection() {
+  const destinationToKeep = document.getElementById('indDestination').value || (currentDestination?.id && currentDestination.id !== UNASSIGNED_DESTINATION_ID ? currentDestination.id : '');
+  resetIndicatorForm();
+  populateIndicatorTemplateSelect('');
+  populateDestinationSelect(destinationToKeep);
+  populateAnnualModeSelect('sum');
+  populateMetricControls();
+  toggleFormulaFields();
 }
 
 function openNewIndicatorModal() {
   resetIndicatorForm();
+  document.getElementById('indicatorTemplateSection').style.display = 'block';
+  populateIndicatorTemplateSelect('');
   populateDestinationSelect(currentDestination?.id && currentDestination.id !== UNASSIGNED_DESTINATION_ID ? currentDestination.id : '');
   populateAnnualModeSelect('sum');
   populateMetricControls();
@@ -864,6 +942,7 @@ function openNewIndicatorModal() {
 
 function openEditIndicatorModal() {
   if (!currentIndicator) return;
+  document.getElementById('indicatorTemplateSection').style.display = 'none';
   document.getElementById('indicatorModalTitle').textContent = 'Editar indicador';
   document.getElementById('indicatorId').value = currentIndicator.id;
   document.getElementById('indName').value = currentIndicator.name;
@@ -874,6 +953,7 @@ function openEditIndicatorModal() {
   document.getElementById('indFormulaMultiplier').value = currentIndicator.formula_multiplier ?? 1;
   document.getElementById('indFormulaNumerator').dataset.current = currentIndicator.formula_numerator_key || '';
   document.getElementById('indFormulaDenominator').dataset.current = currentIndicator.formula_denominator_key || '';
+  populateIndicatorTemplateSelect('');
   populateDestinationSelect(currentIndicator.destination_id || '');
   populateAnnualModeSelect(currentIndicator.annual_calc_mode || 'sum');
   populateMetricControls(getMetricKey(currentIndicator));
