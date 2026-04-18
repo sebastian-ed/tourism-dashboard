@@ -1,21 +1,39 @@
 // ── EXPORTS ──────────────────────────────────────────────────
 
+function buildExportLabel(indicator) {
+  const destinationName = indicator?.destination?.name || indicator?.destination_name || '';
+  return destinationName ? `${destinationName} · ${indicator.name}` : indicator.name;
+}
+
+function buildExportFilename(indicator, ext) {
+  const parts = [];
+  if (indicator?.destination?.name) parts.push(indicator.destination.name);
+  if (indicator?.name) parts.push(indicator.name);
+  const base = parts.join('_').replace(/\s+/g, '_').replace(/[^\w\-áéíóúÁÉÍÓÚñÑ]/g, '');
+  return `${base || 'indicador'}_${new Date().toISOString().slice(0,10)}.${ext}`;
+}
+
 async function exportToExcel(indicator, dataByYear, yearlyStats) {
   const wb = XLSX.utils.book_new();
 
-  // ── Sheet 1: Data ──
   const years = Object.keys(dataByYear).map(Number).sort();
+  const destinationName = indicator?.destination?.name || '';
+
   const header = ['Mes', ...years.map(String)];
-  const rows = [header];
+  const rows = [];
+  if (destinationName) rows.push(['Destino', destinationName]);
+  rows.push(['Indicador', indicator.name]);
+  rows.push(['Unidad', indicator.unit || '']);
+  rows.push([]);
+  rows.push(header);
+
   MONTHS.forEach((m, mi) => {
     rows.push([m, ...years.map(yr => dataByYear[yr][mi] ?? '')]);
   });
-  // Totals row
   rows.push(['Total anual', ...years.map(yr => yearlyStats[yr]?.sum ?? '')]);
   const ws1 = XLSX.utils.aoa_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb, ws1, 'Datos');
 
-  // ── Sheet 2: Stats ──
   const statsHeader = ['Año', 'Suma', 'Promedio', 'Mediana', 'Mínimo', 'Máximo', 'Desvío Std', 'Var. interanual suma %'];
   const statsRows = [statsHeader];
   years.forEach(yr => {
@@ -35,8 +53,7 @@ async function exportToExcel(indicator, dataByYear, yearlyStats) {
   const ws2 = XLSX.utils.aoa_to_sheet(statsRows);
   XLSX.utils.book_append_sheet(wb, ws2, 'Estadísticas');
 
-  const fileName = `${indicator.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0,10)}.xlsx`;
-  XLSX.writeFile(wb, fileName);
+  XLSX.writeFile(wb, buildExportFilename(indicator, 'xlsx'));
 }
 
 async function exportToPDF(indicator, dataByYear, yearlyStats) {
@@ -45,30 +62,33 @@ async function exportToPDF(indicator, dataByYear, yearlyStats) {
 
   const years = Object.keys(dataByYear).map(Number).sort();
   const now = new Date().toLocaleDateString('es-AR');
+  const destinationName = indicator?.destination?.name || '';
 
-  // ── Cover ──
   doc.setFillColor(15, 23, 42);
   doc.rect(0, 0, 297, 210, 'F');
 
   doc.setTextColor(59, 130, 246);
   doc.setFontSize(9);
-  doc.text('DASHBOARD DE TURISMO', 14, 20);
+  doc.text(destinationName ? 'DASHBOARD DE TURISMO · DESTINO' : 'DASHBOARD DE TURISMO', 14, 20);
+
+  doc.setTextColor(148, 163, 184);
+  doc.setFontSize(11);
+  if (destinationName) doc.text(destinationName, 14, 29);
 
   doc.setTextColor(226, 232, 240);
   doc.setFontSize(22);
-  doc.text(indicator.name, 14, 34);
+  doc.text(indicator.name, 14, destinationName ? 40 : 34);
 
   if (indicator.description) {
     doc.setFontSize(11);
     doc.setTextColor(148, 163, 184);
-    doc.text(indicator.description, 14, 43);
+    doc.text(indicator.description, 14, destinationName ? 49 : 43);
   }
 
   doc.setFontSize(9);
   doc.setTextColor(100, 116, 139);
-  doc.text(`Generado: ${now}  ·  Unidad: ${indicator.unit || 'N/A'}`, 14, 52);
+  doc.text(`Generado: ${now}  ·  Unidad: ${indicator.unit || 'N/A'}`, 14, destinationName ? 58 : 52);
 
-  // ── KPI boxes ──
   const allVals = Object.values(dataByYear).flat().filter(v => v !== null && !isNaN(v));
   const globalStats = calcStats(allVals);
   const kpis = [
@@ -77,19 +97,19 @@ async function exportToPDF(indicator, dataByYear, yearlyStats) {
     { label: 'Mínimo histórico', value: formatNumber(globalStats?.min) },
     { label: 'Años cargados', value: String(years.length) },
   ];
+  const kpiY = destinationName ? 66 : 60;
   kpis.forEach((kpi, i) => {
     const x = 14 + i * 68;
     doc.setFillColor(30, 41, 59);
-    doc.roundedRect(x, 60, 62, 20, 3, 3, 'F');
+    doc.roundedRect(x, kpiY, 62, 20, 3, 3, 'F');
     doc.setTextColor(100, 116, 139);
     doc.setFontSize(8);
-    doc.text(kpi.label, x + 5, 68);
+    doc.text(kpi.label, x + 5, kpiY + 8);
     doc.setTextColor(226, 232, 240);
     doc.setFontSize(13);
-    doc.text(kpi.value, x + 5, 76);
+    doc.text(kpi.value, x + 5, kpiY + 16);
   });
 
-  // ── Charts ──
   const lineCanvas = document.getElementById('lineChart');
   const barCanvas = document.getElementById('barChart');
 
@@ -100,7 +120,7 @@ async function exportToPDF(indicator, dataByYear, yearlyStats) {
     doc.rect(0, 0, 297, 210, 'F');
     doc.setTextColor(226, 232, 240);
     doc.setFontSize(13);
-    doc.text('Evolución mensual por año', 14, 15);
+    doc.text(`Evolución mensual por año · ${buildExportLabel(indicator)}`, 14, 15);
     doc.addImage(lineImg, 'PNG', 14, 20, 269, 160);
   }
 
@@ -111,17 +131,16 @@ async function exportToPDF(indicator, dataByYear, yearlyStats) {
     doc.rect(0, 0, 297, 210, 'F');
     doc.setTextColor(226, 232, 240);
     doc.setFontSize(13);
-    doc.text('Totales anuales', 14, 15);
+    doc.text(`Totales anuales · ${buildExportLabel(indicator)}`, 14, 15);
     doc.addImage(barImg, 'PNG', 14, 20, 269, 160);
   }
 
-  // ── Stats table ──
   doc.addPage();
   doc.setFillColor(15, 23, 42);
   doc.rect(0, 0, 297, 210, 'F');
   doc.setTextColor(226, 232, 240);
   doc.setFontSize(13);
-  doc.text('Estadísticas por año', 14, 15);
+  doc.text(`Estadísticas por año · ${buildExportLabel(indicator)}`, 14, 15);
 
   const tableHead = [['Año', 'Total', 'Promedio', 'Mediana', 'Mínimo', 'Máximo', 'Desvío Std', 'Var. interanual']];
   const tableBody = years.map(yr => {
@@ -153,6 +172,5 @@ async function exportToPDF(indicator, dataByYear, yearlyStats) {
     alternateRowStyles: { fillColor: [15, 23, 42] },
   });
 
-  const fileName = `${indicator.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0,10)}.pdf`;
-  doc.save(fileName);
+  doc.save(buildExportFilename(indicator, 'pdf'));
 }

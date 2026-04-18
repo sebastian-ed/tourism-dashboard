@@ -9,7 +9,6 @@ function calcStats(values) {
   const sum = clean.reduce((a, b) => a + b, 0);
   const mean = sum / n;
 
-  // Median
   let median;
   if (n % 2 === 0) {
     median = (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
@@ -17,12 +16,8 @@ function calcStats(values) {
     median = sorted[Math.floor(n / 2)];
   }
 
-  // Std dev
   const variance = clean.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) / n;
   const stdDev = Math.sqrt(variance);
-
-  // YoY change (last vs prev year complete data)
-  const yoyChange = null; // calculated externally when needed
 
   return {
     count: n,
@@ -37,7 +32,6 @@ function calcStats(values) {
 }
 
 function calcYearlyStats(dataByYear) {
-  // dataByYear: { year: [v1..v12] }
   const years = Object.keys(dataByYear).map(Number).sort();
   const result = {};
 
@@ -50,7 +44,6 @@ function calcYearlyStats(dataByYear) {
     }
   });
 
-  // YoY
   for (let i = 1; i < years.length; i++) {
     const curr = result[years[i]];
     const prev = result[years[i - 1]];
@@ -64,7 +57,6 @@ function calcYearlyStats(dataByYear) {
 }
 
 function buildDataByYear(dataPoints) {
-  // dataPoints: [{year, month, value}]
   const byYear = {};
   dataPoints.forEach(dp => {
     if (!byYear[dp.year]) byYear[dp.year] = new Array(12).fill(null);

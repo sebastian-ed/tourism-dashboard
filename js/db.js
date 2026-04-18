@@ -8,30 +8,109 @@ function getSupabase() {
   return supabaseClient;
 }
 
-// ── INDICATORS ──────────────────────────────────────────────
-async function fetchIndicators() {
-  const { data, error } = await getSupabase()
-    .from('indicators')
-    .select('*')
-    .order('name');
-  if (error) throw error;
-  return data;
+function slugify(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
 }
 
-async function createIndicator(name, description, unit) {
+// ── DESTINATIONS ───────────────────────────────────────────
+async function fetchDestinations() {
   const { data, error } = await getSupabase()
-    .from('indicators')
-    .insert({ name, description, unit })
+    .from('destinations')
+    .select('*')
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+async function createDestination(name, sortOrder = null) {
+  const payload = {
+    name: name.trim(),
+    slug: slugify(name),
+  };
+  if (sortOrder !== null && sortOrder !== '' && !isNaN(sortOrder)) {
+    payload.sort_order = Number(sortOrder);
+  }
+
+  const { data, error } = await getSupabase()
+    .from('destinations')
+    .insert(payload)
     .select()
     .single();
   if (error) throw error;
   return data;
 }
 
+async function updateDestination(id, fields) {
+  const payload = { ...fields, updated_at: new Date().toISOString() };
+  if (payload.name) {
+    payload.name = payload.name.trim();
+    if (!payload.slug) payload.slug = slugify(payload.name);
+  }
+  if (payload.sort_order === '' || payload.sort_order === null || payload.sort_order === undefined) {
+    delete payload.sort_order;
+  }
+  const { error } = await getSupabase()
+    .from('destinations')
+    .update(payload)
+    .eq('id', id);
+  if (error) throw error;
+}
+
+async function deleteDestination(id) {
+  const { error } = await getSupabase()
+    .from('destinations')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// ── INDICATORS ─────────────────────────────────────────────
+async function fetchIndicators() {
+  const { data, error } = await getSupabase()
+    .from('indicators')
+    .select('*, destinations(id, name, slug)')
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return (data || []).map(item => ({
+    ...item,
+    destination: item.destinations || null,
+  }));
+}
+
+async function createIndicator(name, description, unit, destinationId) {
+  const { data, error } = await getSupabase()
+    .from('indicators')
+    .insert({
+      name: name.trim(),
+      description,
+      unit,
+      destination_id: destinationId || null,
+    })
+    .select('*, destinations(id, name, slug)')
+    .single();
+  if (error) throw error;
+  return {
+    ...data,
+    destination: data.destinations || null,
+  };
+}
+
 async function updateIndicator(id, fields) {
   const { error } = await getSupabase()
     .from('indicators')
-    .update({ ...fields, updated_at: new Date().toISOString() })
+    .update({
+      ...fields,
+      destination_id: fields.destination_id || null,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', id);
   if (error) throw error;
 }
@@ -50,14 +129,13 @@ async function fetchDataPoints(indicatorId) {
     .from('data_points')
     .select('*')
     .eq('indicator_id', indicatorId)
-    .order('year')
-    .order('month');
+    .order('year', { ascending: true })
+    .order('month', { ascending: true });
   if (error) throw error;
-  return data;
+  return data || [];
 }
 
 async function upsertDataPoints(points) {
-  // points: [{ indicator_id, year, month, value }]
   const { error } = await getSupabase()
     .from('data_points')
     .upsert(points, { onConflict: 'indicator_id,year,month' });
@@ -73,7 +151,18 @@ async function deleteDataPointsForYear(indicatorId, year) {
   if (error) throw error;
 }
 
-// ── AUTH ─────────────────────────────────────────────────────
+
+async function fetchIndicatorsWithData(indicatorIds) {
+  if (!indicatorIds || !indicatorIds.length) return new Set();
+  const { data, error } = await getSupabase()
+    .from('data_points')
+    .select('indicator_id')
+    .in('indicator_id', indicatorIds);
+  if (error) throw error;
+  return new Set((data || []).map(row => row.indicator_id));
+}
+
+// ── AUTH ───────────────────────────────────────────────────
 async function signIn(email, password) {
   const { data, error } = await getSupabase().auth.signInWithPassword({ email, password });
   if (error) throw error;

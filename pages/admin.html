@@ -10,7 +10,6 @@
 </head>
 <body>
 
-<!-- ── AUTH OVERLAY ─────────────────────────────────────── -->
 <div id="authPage" class="auth-page">
   <div class="auth-card">
     <h1>Panel Admin</h1>
@@ -21,8 +20,7 @@
     </div>
     <div class="form-group">
       <label class="form-label">Contraseña</label>
-      <input id="authPassword" type="password" class="form-control" placeholder="••••••••"
-             onkeydown="if(event.key==='Enter') doLogin()"/>
+      <input id="authPassword" type="password" class="form-control" placeholder="••••••••" onkeydown="if(event.key==='Enter') doLogin()"/>
     </div>
     <button class="btn btn-primary" style="width:100%" onclick="doLogin()">
       <span id="loginLabel">Ingresar</span>
@@ -31,52 +29,90 @@
   </div>
 </div>
 
-<!-- ── MAIN APP ──────────────────────────────────────────── -->
 <div id="appShell" class="app-shell" style="display:none">
-
-  <!-- SIDEBAR -->
   <aside class="sidebar">
     <div class="sidebar-logo">
       <div class="logo-badge">⚡ Admin</div>
       <h1>Turismo Argentina</h1>
-      <p>Panel de administración</p>
+      <p>Administración agrupada por destino</p>
     </div>
-    <div class="sidebar-section">Indicadores</div>
+
+    <div class="sidebar-section">Destinos</div>
+    <div class="destination-list" id="destinationList">
+      <div style="padding:20px;text-align:center"><div class="spinner" style="margin:0 auto"></div></div>
+    </div>
+
+    <div class="sidebar-section">Indicadores del destino</div>
     <div class="indicator-list" id="sidebarList">
-      <div class="spinner" style="margin:20px auto;display:block"></div>
+      <div class="sidebar-hint">Seleccioná un destino para gestionar sus indicadores.</div>
     </div>
+
     <div class="sidebar-footer">
-      <button class="btn btn-secondary" style="width:100%;margin-bottom:8px"
-              onclick="openNewIndicatorModal()">
-        + Nuevo indicador
-      </button>
-      <button class="btn btn-ghost" style="width:100%;font-size:12px" onclick="doLogout()">
-        Cerrar sesión
-      </button>
+      <div class="sidebar-actions">
+        <button class="btn btn-secondary" onclick="openDestinationModal()">+ Nuevo destino</button>
+        <button class="btn btn-primary" onclick="openNewIndicatorModal()">+ Nuevo indicador</button>
+        <button class="btn btn-ghost" onclick="doLogout()">Cerrar sesión</button>
+      </div>
     </div>
   </aside>
 
-  <!-- MAIN -->
   <main class="main-content">
     <div id="mainEmpty" class="empty-state">
       <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M9 19v-6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2zm0 0V9a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v10m-6 0a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2m0 0V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v14a2 2 0 0 0 2 2h-2a2 2 0 0 1-2-2z"/>
       </svg>
-      <h3>Seleccioná un indicador</h3>
-      <p>O creá uno nuevo desde el panel izquierdo</p>
+      <h3>Seleccioná un destino</h3>
+      <p>Desde ahí podés ver y administrar todos los indicadores asociados.</p>
+    </div>
+
+    <div id="destinationOverview" class="destination-overview overview-card">
+      <div class="overview-hero">
+        <div class="title-with-badge">
+          <h2 id="destinationTitle">—</h2>
+          <span class="badge badge-blue" id="destinationBadge">0 indicadores</span>
+        </div>
+        <p id="destinationSubtitle">Gestioná los indicadores de este destino sin tocar el resto de la app.</p>
+      </div>
+
+      <div class="overview-summary">
+        <div class="destination-stat">
+          <div class="destination-stat-label">Indicadores cargados</div>
+          <div class="destination-stat-value" id="overviewIndicatorsCount">0</div>
+        </div>
+        <div class="destination-stat">
+          <div class="destination-stat-label">Con datos cargados</div>
+          <div class="destination-stat-value" id="overviewWithDataCount">0</div>
+        </div>
+        <div class="destination-stat">
+          <div class="destination-stat-label">Pendientes de carga</div>
+          <div class="destination-stat-value" id="overviewWithoutDataCount">0</div>
+        </div>
+      </div>
+
+      <div class="overview-card-header">
+        <h3>Indicadores del destino</h3>
+        <div class="topbar-actions">
+          <button class="btn btn-secondary btn-sm" onclick="openEditDestinationModal()">✏️ Editar destino</button>
+          <button class="btn btn-primary btn-sm" onclick="openNewIndicatorModal()">+ Nuevo indicador</button>
+        </div>
+      </div>
+      <div class="destination-cards" id="destinationCards"></div>
+      <div class="empty-indicators" id="destinationCardsEmpty" style="display:none">
+        Este destino no tiene indicadores. Creá el primero y dejá de administrarlo por intuición.
+      </div>
     </div>
 
     <div id="mainView" style="display:none">
-      <!-- Top bar -->
       <div class="topbar">
         <div class="topbar-title">
-          <h2 id="viewTitle">—</h2>
+          <div class="title-with-badge">
+            <h2 id="viewTitle">—</h2>
+            <span class="badge badge-blue" id="viewDestinationBadge"></span>
+          </div>
           <p id="viewDesc" style="color:var(--text-muted);font-size:13px"></p>
         </div>
         <div class="topbar-actions">
-          <a href="../index.html" class="btn btn-ghost btn-sm" target="_blank">
-            Ver público ↗
-          </a>
+          <button class="btn btn-secondary btn-sm" onclick="showCurrentDestinationOverview()">← Volver al destino</button>
           <button class="btn btn-secondary btn-sm" onclick="openEditIndicatorModal()">✏️ Editar</button>
           <button class="btn btn-secondary btn-sm" onclick="openDataModal()">📋 Cargar datos</button>
           <button class="btn btn-secondary btn-sm" id="exportXlsxBtn" onclick="handleExcelExport()">⬇ Excel</button>
@@ -84,10 +120,8 @@
         </div>
       </div>
 
-      <!-- KPIs -->
       <div class="kpi-grid" id="kpiGrid"></div>
 
-      <!-- Charts -->
       <div class="charts-grid">
         <div class="chart-card">
           <div class="chart-card-header">
@@ -104,7 +138,6 @@
         </div>
       </div>
 
-      <!-- Stats table -->
       <div class="table-card">
         <div class="table-card-header">
           <h3>Estadísticas por año</h3>
@@ -129,7 +162,6 @@
         </div>
       </div>
 
-      <!-- Monthly data table -->
       <div class="table-card">
         <div class="table-card-header">
           <h3>Datos mensuales</h3>
@@ -142,7 +174,31 @@
   </main>
 </div>
 
-<!-- ── MODAL: New/Edit Indicator ───────────────────────── -->
+<div id="destinationModal" class="modal-overlay" onclick="if(event.target===this)closeDestinationModal()">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <h2 id="destinationModalTitle">Nuevo destino</h2>
+      <button class="btn btn-ghost" onclick="closeDestinationModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="destinationId"/>
+      <div class="form-group">
+        <label class="form-label">Nombre del destino *</label>
+        <input id="destinationName" class="form-control" placeholder="Ej: Mar del Plata"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Orden (opcional)</label>
+        <input id="destinationOrder" type="number" class="form-control" placeholder="Ej: 10"/>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary" onclick="closeDestinationModal()">Cancelar</button>
+        <button class="btn btn-danger btn-sm" id="deleteDestinationBtn" onclick="deleteCurrentDestination()" style="display:none">Eliminar destino</button>
+        <button class="btn btn-primary" onclick="saveDestination()">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="indicatorModal" class="modal-overlay" onclick="if(event.target===this)closeIndicatorModal()">
   <div class="modal">
     <div class="modal-header">
@@ -153,8 +209,8 @@
       <input type="hidden" id="indicatorId"/>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Nombre *</label>
-          <input id="indName" class="form-control" placeholder="Ej: Habitaciones ocupadas"/>
+          <label class="form-label">Destino *</label>
+          <select id="indDestination" class="form-control"></select>
         </div>
         <div class="form-group">
           <label class="form-label">Unidad</label>
@@ -162,21 +218,22 @@
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Descripción</label>
-        <textarea id="indDesc" class="form-control" rows="2"
-                  placeholder="Descripción breve del indicador"></textarea>
+        <label class="form-label">Nombre *</label>
+        <input id="indName" class="form-control" placeholder="Ej: Habitaciones ocupadas"/>
       </div>
-      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+      <div class="form-group">
+        <label class="form-label">Descripción</label>
+        <textarea id="indDesc" class="form-control" rows="2" placeholder="Descripción breve del indicador"></textarea>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap">
         <button class="btn btn-secondary" onclick="closeIndicatorModal()">Cancelar</button>
-        <button class="btn btn-danger btn-sm" id="deleteIndBtn" onclick="deleteCurrentIndicator()"
-                style="display:none">Eliminar indicador</button>
+        <button class="btn btn-danger btn-sm" id="deleteIndBtn" onclick="deleteCurrentIndicator()" style="display:none">Eliminar indicador</button>
         <button class="btn btn-primary" onclick="saveIndicator()">Guardar</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ── MODAL: Data Entry ────────────────────────────────── -->
 <div id="dataModal" class="modal-overlay" onclick="if(event.target===this)closeDataModal()">
   <div class="modal" style="max-width:980px">
     <div class="modal-header">
@@ -184,38 +241,28 @@
       <button class="btn btn-ghost" onclick="closeDataModal()">✕</button>
     </div>
     <div class="modal-body">
-
-      <!-- Paste area -->
       <div class="form-group">
         <label class="form-label">📋 Pegado rápido desde Excel</label>
-        <textarea id="pasteArea" class="paste-area"
-                  placeholder="Copiá y pegá una fila o columna directamente desde Excel (ej: 2.390   2.050   1.827 ... separado por tabs)&#10;También podés escribir o editar directamente en la grilla abajo."
-                  onpaste="handlePaste(event)"></textarea>
-        <div class="paste-hint">
-          ⚡ Tip: Seleccioná la fila completa en Excel (con Ctrl+Shift+End), copiala (Ctrl+C) y pegala acá.
-          El sistema separa los valores por tab, coma o punto y coma automáticamente.
-        </div>
+        <textarea id="pasteArea" class="paste-area" placeholder="Copiá y pegá una fila o columna desde Excel. El sistema separa valores por tab, coma o punto y coma automáticamente." onpaste="handlePaste(event)"></textarea>
+        <div class="paste-hint">El flujo de carga se conserva. Solo le agregamos inteligencia organizativa alrededor.</div>
       </div>
 
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap">
         <div style="display:flex;align-items:center;gap:8px">
           <label class="form-label" style="margin:0">Año del pegado:</label>
-          <input id="pasteYear" type="number" class="form-control"
-                 style="width:90px" placeholder="2024"/>
+          <input id="pasteYear" type="number" class="form-control" style="width:90px" placeholder="2024"/>
         </div>
         <button class="btn btn-secondary btn-sm" onclick="applyPaste()">Aplicar pegado ▶</button>
         <div style="flex:1"></div>
         <button class="btn btn-secondary btn-sm" onclick="addYearRow()">+ Agregar año</button>
-        <button class="btn btn-secondary btn-sm" onclick="removeLastYear()"
-                style="color:var(--danger)">− Quitar último</button>
+        <button class="btn btn-secondary btn-sm" onclick="removeLastYear()" style="color:var(--danger)">− Quitar último</button>
       </div>
 
-      <!-- Grid editor -->
       <div style="overflow-x:auto;margin-bottom:20px">
         <div class="month-grid" id="monthGrid"></div>
       </div>
 
-      <div style="display:flex;justify-content:flex-end;gap:10px">
+      <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap">
         <button class="btn btn-secondary" onclick="closeDataModal()">Cancelar</button>
         <button class="btn btn-primary" onclick="saveData()">💾 Guardar datos</button>
       </div>
@@ -223,10 +270,8 @@
   </div>
 </div>
 
-<!-- ── TOASTS ───────────────────────────────────────────── -->
 <div class="toast-container" id="toastContainer"></div>
 
-<!-- ── SCRIPTS ─────────────────────────────────────────── -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -238,23 +283,22 @@
 <script src="../js/charts.js"></script>
 <script src="../js/exports.js"></script>
 <script>
-// ── STATE ─────────────────────────────────────────────────
+let destinations = [];
 let indicators = [];
+let currentDestination = null;
 let currentIndicator = null;
 let currentDataPoints = [];
 let currentDataByYear = {};
 let currentYearlyStats = {};
-// Grid state
 let gridYears = [];
-let gridData = {}; // { year: [12 values] }
+let gridData = {};
+const UNASSIGNED_DESTINATION_ID = '__unassigned__';
 
-// ── INIT ─────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
   const session = await getSession();
   if (session) showApp();
 });
 
-// ── AUTH ─────────────────────────────────────────────────
 async function doLogin() {
   const email = document.getElementById('authEmail').value.trim();
   const pwd = document.getElementById('authPassword').value;
@@ -265,7 +309,7 @@ async function doLogin() {
   try {
     await signIn(email, pwd);
     showApp();
-  } catch(e) {
+  } catch (e) {
     errEl.textContent = e.message || 'Error al iniciar sesión';
     errEl.style.display = 'block';
     label.textContent = 'Ingresar';
@@ -281,125 +325,228 @@ async function doLogout() {
 async function showApp() {
   document.getElementById('authPage').style.display = 'none';
   document.getElementById('appShell').style.display = 'grid';
-  await loadIndicators();
+  await loadCoreData();
 }
 
-// ── INDICATORS ───────────────────────────────────────────
-async function loadIndicators() {
+async function loadCoreData({ keepSelection = true } = {}) {
+  const previousDestinationId = keepSelection ? currentDestination?.id : null;
+  const previousIndicatorId = keepSelection ? currentIndicator?.id : null;
+
+  destinations = await fetchDestinations();
+  indicators = await fetchIndicators();
+  indicators.forEach(ind => { ind.has_data = Boolean(ind.has_data); });
+
+  const renderableDestinations = getRenderableDestinations();
+  currentDestination = renderableDestinations.find(d => d.id === previousDestinationId) || renderableDestinations[0] || null;
+  currentIndicator = indicators.find(i => i.id === previousIndicatorId) || null;
+
+  renderSidebar();
+
+  if (currentIndicator) {
+    await selectIndicator(currentIndicator.id, { silent: true });
+  } else if (currentDestination) {
+    await selectDestination(currentDestination.id);
+  } else {
+    showEmptyState();
+  }
+}
+
+function getRenderableDestinations() {
+  const list = [...destinations];
+  if (indicators.some(ind => !ind.destination_id)) {
+    list.push({ id: UNASSIGNED_DESTINATION_ID, name: 'Sin destino', pseudo: true });
+  }
+  return list;
+}
+
+function getDestinationById(destinationId) {
+  return getRenderableDestinations().find(dest => dest.id === destinationId) || null;
+}
+
+function getIndicatorsForDestination(destinationId) {
+  if (destinationId === UNASSIGNED_DESTINATION_ID) {
+    return indicators.filter(ind => !ind.destination_id);
+  }
+  return indicators.filter(ind => ind.destination_id === destinationId);
+}
+
+
+async function hydrateDestinationDataStatus(destinationId) {
+  const destinationIndicators = getIndicatorsForDestination(destinationId);
+  const ids = destinationIndicators.map(ind => ind.id);
+  if (!ids.length) return;
   try {
-    indicators = await fetchIndicators();
-    renderSidebar();
-  } catch(e) {
-    toast('Error cargando indicadores: ' + e.message, 'error');
+    const presence = await fetchIndicatorsWithData(ids);
+    indicators.forEach(ind => {
+      if (ids.includes(ind.id)) ind.has_data = presence.has(ind.id);
+    });
+  } catch (e) {
+    // la administración sigue operativa aunque falle esta capa visual
   }
 }
 
 function renderSidebar() {
-  const list = document.getElementById('sidebarList');
-  if (!indicators.length) {
-    list.innerHTML = '<p style="padding:16px;font-size:12px;color:var(--text-muted)">No hay indicadores aún.</p>';
+  const destinationList = document.getElementById('destinationList');
+  const allDestinations = getRenderableDestinations();
+  destinationList.innerHTML = allDestinations.length
+    ? allDestinations.map(dest => {
+        const count = getIndicatorsForDestination(dest.id).length;
+        return `
+          <button class="destination-item ${currentDestination?.id === dest.id ? 'active' : ''}" onclick="selectDestination('${dest.id}')">
+            <span class="destination-main">
+              <span class="destination-name">${escapeHtml(dest.name)}</span>
+              <span class="destination-meta">${count} indicador${count !== 1 ? 'es' : ''}</span>
+            </span>
+            <span class="destination-count">${count}</span>
+          </button>
+        `;
+      }).join('')
+    : '<div class="sidebar-hint">No hay destinos cargados.</div>';
+
+  const sidebarList = document.getElementById('sidebarList');
+  if (!currentDestination) {
+    sidebarList.innerHTML = '<div class="sidebar-hint">Seleccioná un destino para administrar sus indicadores.</div>';
     return;
   }
-  list.innerHTML = indicators.map(ind => `
-    <div class="indicator-item ${currentIndicator?.id === ind.id ? 'active' : ''}"
-         onclick="selectIndicator('${ind.id}')">
-      <span class="ind-name">${ind.name}</span>
-      <span class="ind-unit">${ind.unit || ''}</span>
-    </div>
-  `).join('');
+
+  const items = getIndicatorsForDestination(currentDestination.id);
+  sidebarList.innerHTML = items.length
+    ? items.map(ind => `
+        <button class="indicator-item ${currentIndicator?.id === ind.id ? 'active' : ''}" onclick="selectIndicator('${ind.id}')">
+          <span class="indicator-main">
+            <span class="ind-name">${escapeHtml(ind.name)}</span>
+            <span class="ind-unit">${ind.unit || 'sin unidad'}</span>
+          </span>
+          ${ind.has_data ? '<span class="badge badge-green">datos</span>' : '<span class="badge badge-orange">vacío</span>'}
+        </button>
+      `).join('')
+    : '<div class="sidebar-hint">Este destino todavía no tiene indicadores.</div>';
 }
 
-async function selectIndicator(id) {
-  currentIndicator = indicators.find(i => i.id === id);
+async function selectDestination(destinationId) {
+  currentDestination = getDestinationById(destinationId);
+  if (!currentDestination) return;
+
+  if (currentIndicator && currentIndicator.destination_id !== (destinationId === UNASSIGNED_DESTINATION_ID ? null : destinationId)) {
+    currentIndicator = null;
+    destroyCharts();
+  }
+
+  await hydrateDestinationDataStatus(destinationId);
   renderSidebar();
-  await loadIndicatorData();
-  document.getElementById('mainEmpty').style.display = 'none';
-  document.getElementById('mainView').style.display = 'block';
+  showCurrentDestinationOverview();
 }
 
-async function loadIndicatorData() {
+function showCurrentDestinationOverview() {
+  if (!currentDestination) {
+    showEmptyState();
+    return;
+  }
+
+  currentIndicator = null;
+  renderSidebar();
+
+  const items = getIndicatorsForDestination(currentDestination.id);
+  const withData = items.filter(ind => ind.has_data).length;
+  const withoutData = items.length - withData;
+
+  document.getElementById('destinationTitle').textContent = currentDestination.name;
+  document.getElementById('destinationBadge').textContent = `${items.length} indicador${items.length !== 1 ? 'es' : ''}`;
+  document.getElementById('destinationSubtitle').textContent = items.length
+    ? 'Podés editar el destino, crear indicadores nuevos o entrar al detalle de cualquiera.'
+    : 'Todavía no hay indicadores asociados a este destino.';
+  document.getElementById('overviewIndicatorsCount').textContent = String(items.length);
+  document.getElementById('overviewWithDataCount').textContent = String(withData);
+  document.getElementById('overviewWithoutDataCount').textContent = String(withoutData);
+
+  const cards = document.getElementById('destinationCards');
+  const empty = document.getElementById('destinationCardsEmpty');
+  if (!items.length) {
+    cards.innerHTML = '';
+    empty.style.display = 'block';
+  } else {
+    empty.style.display = 'none';
+    cards.innerHTML = items.map(ind => `
+      <article class="indicator-overview-card">
+        <div>
+          <h4>${escapeHtml(ind.name)}</h4>
+          <p>${escapeHtml(ind.description || 'Sin descripción cargada.')}</p>
+        </div>
+        <div class="indicator-overview-meta">
+          <span>${escapeHtml(ind.unit || 'sin unidad')}</span>
+          <span>${ind.has_data ? 'Con datos' : 'Sin datos'}</span>
+        </div>
+        <div class="card-actions">
+          <button class="btn btn-primary btn-sm" onclick="selectIndicator('${ind.id}')">Abrir</button>
+          <button class="btn btn-secondary btn-sm" onclick="openEditIndicatorModalById('${ind.id}')">Editar</button>
+        </div>
+      </article>
+    `).join('');
+  }
+
+  document.getElementById('mainEmpty').style.display = 'none';
+  document.getElementById('mainView').style.display = 'none';
+  document.getElementById('destinationOverview').style.display = 'block';
+}
+
+async function selectIndicator(id, { silent = false } = {}) {
+  currentIndicator = indicators.find(i => i.id === id);
   if (!currentIndicator) return;
-  document.getElementById('viewTitle').textContent = currentIndicator.name;
-  document.getElementById('viewDesc').textContent = currentIndicator.description || '';
-  document.getElementById('statsUnit').textContent = currentIndicator.unit || 'unidades';
+
+  const destinationId = currentIndicator.destination_id || UNASSIGNED_DESTINATION_ID;
+  currentDestination = getDestinationById(destinationId);
+  renderSidebar();
+
   try {
     currentDataPoints = await fetchDataPoints(currentIndicator.id);
+    currentIndicator.has_data = currentDataPoints.length > 0;
     currentDataByYear = buildDataByYear(currentDataPoints);
     currentYearlyStats = calcYearlyStats(currentDataByYear);
     renderDashboard();
-  } catch(e) {
-    toast('Error cargando datos: ' + e.message, 'error');
+    document.getElementById('mainEmpty').style.display = 'none';
+    document.getElementById('destinationOverview').style.display = 'none';
+    document.getElementById('mainView').style.display = 'block';
+  } catch (e) {
+    if (!silent) toast('Error cargando datos: ' + e.message, 'error');
   }
 }
 
 function renderDashboard() {
   const years = Object.keys(currentDataByYear).map(Number).sort();
+  document.getElementById('viewTitle').textContent = currentIndicator.name;
+  document.getElementById('viewDesc').textContent = currentIndicator.description || '';
+  document.getElementById('viewDestinationBadge').textContent = currentDestination?.name || 'Sin destino';
+  document.getElementById('statsUnit').textContent = currentIndicator.unit || 'unidades';
   document.getElementById('yearsCount').textContent = years.length + ' año' + (years.length !== 1 ? 's' : '');
 
-  // KPIs
   const allVals = currentDataPoints.map(d => Number(d.value)).filter(v => !isNaN(v));
   const gs = calcStats(allVals);
   const lastYear = years[years.length - 1];
-  const prevYear = years[years.length - 2];
   const lastStats = currentYearlyStats[lastYear];
+
   const kpis = [
-    {
-      label: 'Promedio mensual',
-      value: formatNumber(gs?.mean),
-      sub: 'Histórico global',
-      accent: 'var(--accent)',
-    },
-    {
-      label: `Total ${lastYear || '—'}`,
-      value: formatNumber(lastStats?.sum),
-      sub: lastStats?.yoySum !== undefined ? formatPct(lastStats.yoySum) + ' vs año ant.' : '',
-      change: lastStats?.yoySum,
-      accent: '#10B981',
-    },
-    {
-      label: 'Máximo mensual',
-      value: formatNumber(gs?.max),
-      sub: 'Histórico',
-      accent: '#A855F7',
-    },
-    {
-      label: 'Mínimo mensual',
-      value: formatNumber(gs?.min),
-      sub: 'Histórico',
-      accent: '#F97316',
-    },
-    {
-      label: 'Mediana mensual',
-      value: formatNumber(gs?.median),
-      sub: 'Histórico global',
-      accent: '#06B6D4',
-    },
-    {
-      label: 'Desvío estándar',
-      value: formatNumber(gs?.stdDev),
-      sub: 'Variabilidad',
-      accent: '#EAB308',
-    },
+    { label: 'Promedio mensual', value: formatNumber(gs?.mean), sub: 'Histórico global', accent: 'var(--accent)' },
+    { label: `Total ${lastYear || '—'}`, value: formatNumber(lastStats?.sum), change: lastStats?.yoySum, accent: '#10B981' },
+    { label: 'Máximo mensual', value: formatNumber(gs?.max), sub: 'Histórico', accent: '#A855F7' },
+    { label: 'Mínimo mensual', value: formatNumber(gs?.min), sub: 'Histórico', accent: '#F97316' },
+    { label: 'Mediana mensual', value: formatNumber(gs?.median), sub: 'Histórico global', accent: '#06B6D4' },
+    { label: 'Desvío estándar', value: formatNumber(gs?.stdDev), sub: 'Variabilidad', accent: '#EAB308' },
   ];
 
   document.getElementById('kpiGrid').innerHTML = kpis.map(k => `
     <div class="kpi-card" style="--accent-color:${k.accent}">
       <div class="kpi-label">${k.label}</div>
       <div class="kpi-value">${k.value}</div>
-      ${k.change !== undefined && k.change !== null ? `
-        <div class="kpi-change ${k.change >= 0 ? 'up' : 'down'}">
-          ${k.change >= 0 ? '▲' : '▼'} ${formatPct(k.change)}
-        </div>` : k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
+      ${k.change !== undefined && k.change !== null ? `<div class="kpi-change ${k.change >= 0 ? 'up' : 'down'}">${k.change >= 0 ? '▲' : '▼'} ${formatPct(k.change)}</div>` : k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
     </div>
   `).join('');
 
-  // Charts
+  destroyCharts();
   if (years.length) {
     renderLineChart('lineChart', currentDataByYear, currentIndicator);
     renderBarChart('barChart', currentYearlyStats, currentIndicator);
   }
 
-  // Stats table
   const tbody = document.getElementById('statsBody');
   tbody.innerHTML = years.map(yr => {
     const s = currentYearlyStats[yr];
@@ -412,13 +559,10 @@ function renderDashboard() {
       <td>${formatNumber(s?.min)}</td>
       <td>${formatNumber(s?.max)}</td>
       <td>${formatNumber(s?.stdDev)}</td>
-      <td class="${yoy !== undefined && yoy !== null ? (yoy >= 0 ? 'positive' : 'negative') : ''}">
-        ${yoy !== undefined && yoy !== null ? formatPct(yoy) : '-'}
-      </td>
+      <td class="${yoy !== undefined && yoy !== null ? (yoy >= 0 ? 'positive' : 'negative') : ''}">${yoy !== undefined && yoy !== null ? formatPct(yoy) : '-'}</td>
     </tr>`;
   }).join('');
 
-  // Monthly table
   const mt = document.getElementById('monthlyTable');
   const header = `<thead><tr><th>Mes</th>${years.map(yr => `<th>${yr}</th>`).join('')}</tr></thead>`;
   const rows = MONTHS.map((m, mi) => `
@@ -430,8 +574,90 @@ function renderDashboard() {
   mt.innerHTML = header + `<tbody>${rows}</tbody>`;
 }
 
-// ── INDICATOR MODAL ───────────────────────────────────────
+function showEmptyState() {
+  currentDestination = null;
+  currentIndicator = null;
+  destroyCharts();
+  renderSidebar();
+  document.getElementById('mainEmpty').style.display = 'block';
+  document.getElementById('destinationOverview').style.display = 'none';
+  document.getElementById('mainView').style.display = 'none';
+}
+
+function populateDestinationSelect(selectedId = '') {
+  const select = document.getElementById('indDestination');
+  const options = destinations.map(dest => `<option value="${dest.id}">${escapeHtml(dest.name)}</option>`).join('');
+  select.innerHTML = `<option value="">Seleccionar destino</option>${options}`;
+  select.value = selectedId || currentDestination?.id || '';
+}
+
+function openDestinationModal() {
+  document.getElementById('destinationModalTitle').textContent = 'Nuevo destino';
+  document.getElementById('destinationId').value = '';
+  document.getElementById('destinationName').value = '';
+  document.getElementById('destinationOrder').value = '';
+  document.getElementById('deleteDestinationBtn').style.display = 'none';
+  document.getElementById('destinationModal').classList.add('open');
+}
+
+function openEditDestinationModal() {
+  if (!currentDestination || currentDestination.id === UNASSIGNED_DESTINATION_ID) return;
+  document.getElementById('destinationModalTitle').textContent = 'Editar destino';
+  document.getElementById('destinationId').value = currentDestination.id;
+  document.getElementById('destinationName').value = currentDestination.name || '';
+  document.getElementById('destinationOrder').value = currentDestination.sort_order ?? '';
+  document.getElementById('deleteDestinationBtn').style.display = 'inline-flex';
+  document.getElementById('destinationModal').classList.add('open');
+}
+
+function closeDestinationModal() {
+  document.getElementById('destinationModal').classList.remove('open');
+}
+
+async function saveDestination() {
+  const id = document.getElementById('destinationId').value;
+  const name = document.getElementById('destinationName').value.trim();
+  const sortOrder = document.getElementById('destinationOrder').value;
+  if (!name) { toast('El nombre del destino es obligatorio', 'error'); return; }
+
+  try {
+    if (id) {
+      await updateDestination(id, { name, sort_order: sortOrder === '' ? null : Number(sortOrder) });
+      toast('Destino actualizado', 'success');
+    } else {
+      await createDestination(name, sortOrder === '' ? null : Number(sortOrder));
+      toast('Destino creado', 'success');
+    }
+    closeDestinationModal();
+    await loadCoreData({ keepSelection: false });
+    const createdOrUpdated = destinations.find(d => d.name.toLowerCase() === name.toLowerCase());
+    if (createdOrUpdated) await selectDestination(createdOrUpdated.id);
+  } catch (e) {
+    toast('Error guardando destino: ' + e.message, 'error');
+  }
+}
+
+async function deleteCurrentDestination() {
+  if (!currentDestination || currentDestination.id === UNASSIGNED_DESTINATION_ID) return;
+  const linkedIndicators = getIndicatorsForDestination(currentDestination.id);
+  if (linkedIndicators.length) {
+    toast('No podés eliminar un destino que todavía tiene indicadores asignados.', 'error');
+    return;
+  }
+  if (!confirm('¿Eliminar este destino?')) return;
+  try {
+    await deleteDestination(currentDestination.id);
+    closeDestinationModal();
+    currentDestination = null;
+    await loadCoreData({ keepSelection: false });
+    toast('Destino eliminado', 'success');
+  } catch (e) {
+    toast('Error eliminando destino: ' + e.message, 'error');
+  }
+}
+
 function openNewIndicatorModal() {
+  populateDestinationSelect(currentDestination?.id && currentDestination.id !== UNASSIGNED_DESTINATION_ID ? currentDestination.id : '');
   document.getElementById('indicatorModalTitle').textContent = 'Nuevo indicador';
   document.getElementById('indicatorId').value = '';
   document.getElementById('indName').value = '';
@@ -443,6 +669,7 @@ function openNewIndicatorModal() {
 
 function openEditIndicatorModal() {
   if (!currentIndicator) return;
+  populateDestinationSelect(currentIndicator.destination_id || '');
   document.getElementById('indicatorModalTitle').textContent = 'Editar indicador';
   document.getElementById('indicatorId').value = currentIndicator.id;
   document.getElementById('indName').value = currentIndicator.name;
@@ -452,56 +679,59 @@ function openEditIndicatorModal() {
   document.getElementById('indicatorModal').classList.add('open');
 }
 
+function openEditIndicatorModalById(id) {
+  currentIndicator = indicators.find(i => i.id === id) || currentIndicator;
+  openEditIndicatorModal();
+}
+
 function closeIndicatorModal() {
   document.getElementById('indicatorModal').classList.remove('open');
 }
 
 async function saveIndicator() {
   const id = document.getElementById('indicatorId').value;
+  const destinationId = document.getElementById('indDestination').value;
   const name = document.getElementById('indName').value.trim();
   const unit = document.getElementById('indUnit').value.trim();
   const desc = document.getElementById('indDesc').value.trim();
+
+  if (!destinationId) { toast('Elegí un destino para el indicador.', 'error'); return; }
   if (!name) { toast('El nombre es obligatorio', 'error'); return; }
+
   try {
     if (id) {
-      await updateIndicator(id, { name, unit, description: desc });
-      currentIndicator = { ...currentIndicator, name, unit, description: desc };
+      await updateIndicator(id, { name, unit, description: desc, destination_id: destinationId });
+      toast('Indicador actualizado', 'success');
     } else {
-      const created = await createIndicator(name, desc, unit);
-      currentIndicator = created;
-    }
-    await loadIndicators();
-    renderSidebar();
-    if (document.getElementById('mainView').style.display !== 'none') {
-      document.getElementById('viewTitle').textContent = currentIndicator.name;
-      document.getElementById('viewDesc').textContent = currentIndicator.description || '';
+      await createIndicator(name, desc, unit, destinationId);
+      toast('Indicador creado', 'success');
     }
     closeIndicatorModal();
-    toast('Indicador guardado', 'success');
-  } catch(e) {
+    await loadCoreData({ keepSelection: false });
+    await selectDestination(destinationId);
+  } catch (e) {
     toast('Error: ' + e.message, 'error');
   }
 }
 
 async function deleteCurrentIndicator() {
+  if (!currentIndicator) return;
   if (!confirm('¿Eliminar este indicador y todos sus datos? Esta acción no se puede deshacer.')) return;
   try {
+    const destinationId = currentIndicator.destination_id || UNASSIGNED_DESTINATION_ID;
     await deleteIndicator(currentIndicator.id);
     currentIndicator = null;
-    document.getElementById('mainView').style.display = 'none';
-    document.getElementById('mainEmpty').style.display = 'block';
     closeIndicatorModal();
-    await loadIndicators();
+    await loadCoreData({ keepSelection: false });
+    await selectDestination(destinationId);
     toast('Indicador eliminado', 'success');
-  } catch(e) {
+  } catch (e) {
     toast('Error: ' + e.message, 'error');
   }
 }
 
-// ── DATA MODAL ────────────────────────────────────────────
 function openDataModal() {
   if (!currentIndicator) return;
-  // Init grid from current data
   const years = Object.keys(currentDataByYear).map(Number).sort();
   gridYears = years.length ? [...years] : [new Date().getFullYear()];
   gridData = {};
@@ -520,32 +750,21 @@ function closeDataModal() {
 
 function renderGrid() {
   const grid = document.getElementById('monthGrid');
-  // Header
-  let html = `<div class="month-grid-header">
-    <div></div>
-    ${MONTHS.map(m => `<div>${m.slice(0,3)}</div>`).join('')}
-  </div>`;
-
+  let html = `<div class="month-grid-header"><div></div>${MONTHS.map(m => `<div>${m.slice(0,3)}</div>`).join('')}</div>`;
   gridYears.forEach(yr => {
     html += `<div class="month-grid-row">
       <div class="year-label">${yr}</div>
       ${new Array(12).fill(0).map((_, mi) => `
-        <input class="month-cell"
-               type="number"
-               id="cell_${yr}_${mi}"
-               value="${gridData[yr]?.[mi] ?? ''}"
-               step="any"
-               onchange="gridData[${yr}][${mi}] = this.value === '' ? null : parseFloat(this.value)"
-               onkeydown="cellNav(event, ${yr}, ${mi})"/>
+        <input class="month-cell" type="number" id="cell_${yr}_${mi}" value="${gridData[yr]?.[mi] ?? ''}" step="any"
+          onchange="gridData[${yr}][${mi}] = this.value === '' ? null : parseFloat(this.value)"
+          onkeydown="cellNav(event, ${yr}, ${mi})"/>
       `).join('')}
     </div>`;
   });
-
   grid.innerHTML = html;
 }
 
 function cellNav(event, yr, mi) {
-  // Arrow key navigation
   const yi = gridYears.indexOf(yr);
   if (event.key === 'ArrowRight' && mi < 11) {
     document.getElementById(`cell_${yr}_${mi+1}`)?.focus();
@@ -555,9 +774,6 @@ function cellNav(event, yr, mi) {
     document.getElementById(`cell_${gridYears[yi+1]}_${mi}`)?.focus();
   } else if (event.key === 'ArrowUp' && yi > 0) {
     document.getElementById(`cell_${gridYears[yi-1]}_${mi}`)?.focus();
-  } else if (event.key === 'Tab') {
-    // handled by browser
-    return;
   }
 }
 
@@ -577,8 +793,7 @@ function removeLastYear() {
   renderGrid();
 }
 
-function handlePaste(event) {
-  // Don't prevent default - let it paste, then we parse
+function handlePaste() {
   setTimeout(() => {
     const raw = document.getElementById('pasteArea').value;
     parsePasteValues(raw);
@@ -586,9 +801,7 @@ function handlePaste(event) {
 }
 
 function parsePasteValues(raw) {
-  // Split by tab, comma, semicolon or space sequences
   const values = raw.split(/[\t,;]+/).map(v => v.trim()).filter(v => v !== '');
-  // Store parsed values for apply
   window._parsedPaste = values;
   if (values.length) {
     document.getElementById('pasteArea').style.borderColor = 'var(--success)';
@@ -599,19 +812,19 @@ function parsePasteValues(raw) {
 function applyPaste() {
   const raw = document.getElementById('pasteArea').value;
   parsePasteValues(raw);
-  const year = parseInt(document.getElementById('pasteYear').value);
+  const year = parseInt(document.getElementById('pasteYear').value, 10);
   if (!year || isNaN(year)) { toast('Ingresá un año válido', 'error'); return; }
   const values = window._parsedPaste || [];
   if (!values.length) { toast('No hay valores para aplicar. Pegá primero los datos.', 'error'); return; }
 
   if (!gridYears.includes(year)) {
     gridYears.push(year);
-    gridYears.sort((a,b) => a - b);
+    gridYears.sort((a, b) => a - b);
     gridData[year] = new Array(12).fill('');
   }
 
   values.slice(0, 12).forEach((v, i) => {
-    const num = parseFloat(v.replace(/\./g,'').replace(',','.'));
+    const num = parseFloat(v.replace(/\./g, '').replace(',', '.'));
     gridData[year][i] = isNaN(num) ? null : num;
   });
 
@@ -624,38 +837,34 @@ function applyPaste() {
 
 async function saveData() {
   if (!currentIndicator) return;
-  // Read all cells
   const points = [];
   gridYears.forEach(yr => {
     for (let mi = 0; mi < 12; mi++) {
       const cell = document.getElementById(`cell_${yr}_${mi}`);
       const raw = cell ? cell.value : (gridData[yr]?.[mi] ?? '');
       const val = raw === '' || raw === null ? null : parseFloat(raw);
-      points.push({
-        indicator_id: currentIndicator.id,
-        year: yr,
-        month: mi + 1,
-        value: isNaN(val) ? null : val,
-      });
+      points.push({ indicator_id: currentIndicator.id, year: yr, month: mi + 1, value: isNaN(val) ? null : val });
     }
   });
+
   try {
     await upsertDataPoints(points);
+    currentIndicator.has_data = true;
     closeDataModal();
-    await loadIndicatorData();
+    await selectIndicator(currentIndicator.id, { silent: true });
+    renderSidebar();
     toast('Datos guardados correctamente ✓', 'success');
-  } catch(e) {
+  } catch (e) {
     toast('Error guardando: ' + e.message, 'error');
   }
 }
 
-// ── EXPORTS ───────────────────────────────────────────────
 async function handleExcelExport() {
   if (!currentIndicator) return;
   try {
     await exportToExcel(currentIndicator, currentDataByYear, currentYearlyStats);
     toast('Excel generado ✓', 'success');
-  } catch(e) {
+  } catch (e) {
     toast('Error: ' + e.message, 'error');
   }
 }
@@ -665,12 +874,20 @@ async function handlePdfExport() {
   try {
     await exportToPDF(currentIndicator, currentDataByYear, currentYearlyStats);
     toast('PDF generado ✓', 'success');
-  } catch(e) {
+  } catch (e) {
     toast('Error: ' + e.message, 'error');
   }
 }
 
-// ── TOAST ─────────────────────────────────────────────────
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function toast(msg, type = 'success') {
   const container = document.getElementById('toastContainer');
   const el = document.createElement('div');

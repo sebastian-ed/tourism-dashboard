@@ -6,13 +6,11 @@ const CONFIG = {
   SUPABASE_ANON_KEY: 'sb_publishable_Laor_XKXrXTUJqlXnBK8fg_PCmx6-AH',
 };
 
-// Meses en español
 const MONTHS = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
 
-// Colores para las series de años
 const YEAR_COLORS = [
   '#3B82F6', '#F97316', '#10B981', '#A855F7',
   '#EF4444', '#EAB308', '#06B6D4', '#EC4899',
