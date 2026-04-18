@@ -539,8 +539,8 @@ function renderComparisonDestinationChoices() {
   const relevantIndicators = indicators.filter(ind => getMetricKey(ind) === metricKey && ind.destination_id);
   const destinationIds = [...new Set(relevantIndicators.map(ind => ind.destination_id))];
   const availableDestinations = destinations.filter(dest => destinationIds.includes(dest.id));
-  const defaultSelection = comparisonSelection.destinationIds.filter(id => destinationIds.includes(id));
-  comparisonSelection.destinationIds = defaultSelection.length ? defaultSelection : availableDestinations.slice(0, 2).map(dest => dest.id);
+  const preservedSelection = comparisonSelection.destinationIds.filter(id => destinationIds.includes(id));
+  comparisonSelection.destinationIds = preservedSelection.length ? preservedSelection : availableDestinations.slice(0, 2).map(dest => dest.id);
 
   const container = document.getElementById('compareDestinationList');
   if (!availableDestinations.length) {
@@ -549,12 +549,17 @@ function renderComparisonDestinationChoices() {
   }
 
   container.innerHTML = availableDestinations.map(dest => {
-    const checked = comparisonSelection.destinationIds.includes(dest.id);
+    const active = comparisonSelection.destinationIds.includes(dest.id);
     return `
-      <label class="chip-checkbox ${checked ? 'active' : ''}">
-        <input type="checkbox" value="${dest.id}" ${checked ? 'checked' : ''} onchange="toggleComparisonDestination('${dest.id}', this.checked)"/>
-        ${escapeHtml(dest.name)}
-      </label>
+      <button
+        type="button"
+        class="chip-toggle ${active ? 'active' : ''}"
+        aria-pressed="${active ? 'true' : 'false'}"
+        onclick="toggleComparisonDestination('${dest.id}')"
+      >
+        <span class="chip-toggle-marker">${active ? '✓' : '+'}</span>
+        <span>${escapeHtml(dest.name)}</span>
+      </button>
     `;
   }).join('');
 }
@@ -566,12 +571,16 @@ function handleComparisonMetricChange() {
   clearComparisonResults();
 }
 
-function toggleComparisonDestination(destinationId, checked) {
+function toggleComparisonDestination(destinationId) {
   const next = new Set(comparisonSelection.destinationIds);
-  if (checked) next.add(destinationId);
-  else next.delete(destinationId);
+  if (next.has(destinationId)) {
+    next.delete(destinationId);
+  } else {
+    next.add(destinationId);
+  }
   comparisonSelection.destinationIds = [...next];
   renderComparisonDestinationChoices();
+  clearComparisonResults();
 }
 
 function clearComparisonResults() {
