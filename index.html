@@ -144,20 +144,36 @@
 
       <div class="kpi-grid" id="kpiGrid"></div>
 
+      <div class="year-filter-card">
+        <div class="year-filter-header">
+          <div>
+            <h3>Años visibles en gráficos</h3>
+            <p>Seleccioná uno, varios o todos. Esto solo afecta la visualización de los gráficos.</p>
+          </div>
+          <div class="year-filter-actions">
+            <button class="btn btn-secondary btn-sm" type="button" onclick="selectAllVisibleYears()">Ver todos</button>
+            <button class="btn btn-ghost btn-sm" type="button" onclick="clearVisibleYears()">Ocultar todos</button>
+          </div>
+        </div>
+        <div id="yearFilterList" class="year-filter-list"></div>
+      </div>
+
       <div class="charts-grid">
         <div class="chart-card">
           <div class="chart-card-header">
             <span class="chart-card-title">Evolución mensual por año</span>
             <span class="badge badge-blue" id="yearsCount">0 años</span>
           </div>
-          <div class="chart-wrap"><canvas id="lineChart"></canvas></div>
+          <div class="chart-empty" id="lineChartEmpty" style="display:none">Seleccioná al menos un año para visualizar el gráfico.</div>
+          <div class="chart-wrap" id="lineChartWrap"><canvas id="lineChart"></canvas></div>
         </div>
         <div class="chart-card" id="annualChartCard">
           <div class="chart-card-header">
             <span class="chart-card-title" id="annualChartTitle">Total anual</span>
             <span class="chart-card-note" id="annualChartNote"></span>
           </div>
-          <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+          <div class="chart-empty" id="barChartEmpty" style="display:none">Seleccioná al menos un año para visualizar el gráfico.</div>
+          <div class="chart-wrap" id="barChartWrap"><canvas id="barChart"></canvas></div>
         </div>
       </div>
 
@@ -218,6 +234,7 @@ let currentDestination = null;
 let currentIndicator = null;
 let currentDataByYear = {};
 let currentYearlyStats = {};
+let visibleYears = [];
 let comparisonSelection = { metricKey: '', destinationIds: [] };
 
 window.addEventListener('DOMContentLoaded', initApp);
@@ -427,6 +444,7 @@ async function selectIndicator(id) {
     currentDataByYear = buildDataByYear(currentPoints);
     const relatedSeriesMap = buildRelatedSeriesMapForDestination(currentIndicator, destinationIndicators, dataByIndicator);
     currentYearlyStats = calcYearlyStats(currentDataByYear, { indicator: currentIndicator, relatedSeriesMap });
+    visibleYears = getAvailableYears();
     renderDashboard();
     document.getElementById('mainEmpty').style.display = 'none';
     document.getElementById('destinationOverview').style.display = 'none';
@@ -437,18 +455,23 @@ async function selectIndicator(id) {
 }
 
 function renderDashboard() {
-  const years = Object.keys(currentDataByYear).map(Number).sort((a, b) => a - b);
+  const years = getAvailableYears();
+  const shownYears = getVisibleYears();
   const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(currentIndicator));
   document.getElementById('viewTitle').textContent = currentIndicator.name;
   document.getElementById('viewDesc').textContent = currentIndicator.description || '';
   document.getElementById('viewDestinationBadge').textContent = currentDestination?.name || 'Sin destino';
   document.getElementById('statsUnit').textContent = currentIndicator.unit || 'unidades';
-  document.getElementById('yearsCount').textContent = years.length + ' año' + (years.length !== 1 ? 's' : '');
+  document.getElementById('yearsCount').textContent = shownYears.length === years.length
+    ? years.length + ' año' + (years.length !== 1 ? 's' : '')
+    : shownYears.length + ' de ' + years.length + ' año' + (years.length !== 1 ? 's' : '');
   document.getElementById('statsAnnualHeader').textContent = annualMeta.shortLabel;
   document.getElementById('annualChartTitle').textContent = annualMeta.shortLabel;
   document.getElementById('annualChartNote').textContent = currentIndicator.annual_chart_visible === false ? 'Oculto por configuración' : annualMeta.description;
   document.getElementById('annualCalcBadge').textContent = annualMeta.label;
   document.getElementById('annualCalcHelp').textContent = annualMeta.description;
+
+  renderYearFilter();
 
   const allVals = Object.values(currentDataByYear).flat().filter(v => v !== null && !isNaN(v)).map(Number);
   const gs = calcStats(allVals);
@@ -473,14 +496,27 @@ function renderDashboard() {
   `).join('');
 
   destroyCharts();
-  renderLineChart('lineChart', currentDataByYear, currentIndicator);
+  const filteredDataByYear = filterDataByYear(currentDataByYear, shownYears);
+  const filteredYearlyStats = filterYearlyStats(currentYearlyStats, shownYears);
+  const hasVisibleYears = shownYears.length > 0;
+
+  document.getElementById('lineChartEmpty').style.display = hasVisibleYears ? 'none' : 'flex';
+  document.getElementById('lineChartWrap').style.display = hasVisibleYears ? 'block' : 'none';
+  if (hasVisibleYears) {
+    renderLineChart('lineChart', filteredDataByYear, currentIndicator);
+  }
 
   const annualChartCard = document.getElementById('annualChartCard');
-  if (currentIndicator.annual_chart_visible === false || getIndicatorCalcMode(currentIndicator) === 'none') {
+  const annualChartVisible = currentIndicator.annual_chart_visible !== false && getIndicatorCalcMode(currentIndicator) !== 'none';
+  if (!annualChartVisible) {
     annualChartCard.style.display = 'none';
   } else {
     annualChartCard.style.display = 'block';
-    renderBarChart('barChart', currentYearlyStats, currentIndicator);
+    document.getElementById('barChartEmpty').style.display = hasVisibleYears ? 'none' : 'flex';
+    document.getElementById('barChartWrap').style.display = hasVisibleYears ? 'block' : 'none';
+    if (hasVisibleYears) {
+      renderBarChart('barChart', filteredYearlyStats, currentIndicator);
+    }
   }
 
   document.getElementById('statsBody').innerHTML = years.map(yr => {
@@ -509,9 +545,89 @@ function renderDashboard() {
   mt.innerHTML = header + `<tbody>${rows}</tbody>`;
 }
 
+
+function getAvailableYears() {
+  return Object.keys(currentDataByYear).map(Number).sort((a, b) => a - b);
+}
+
+function getVisibleYears() {
+  const availableYears = getAvailableYears();
+  if (!availableYears.length) return [];
+  const availableSet = new Set(availableYears);
+  const cleaned = visibleYears.filter(year => availableSet.has(year)).sort((a, b) => a - b);
+  visibleYears = cleaned;
+  return cleaned;
+}
+
+function renderYearFilter() {
+  const container = document.getElementById('yearFilterList');
+  if (!container) return;
+  const availableYears = getAvailableYears();
+  const selectedYears = getVisibleYears();
+
+  if (!availableYears.length) {
+    container.innerHTML = '<div class="help-text">Este indicador todavía no tiene años cargados.</div>';
+    return;
+  }
+
+  const selectedSet = new Set(selectedYears);
+  container.innerHTML = availableYears.map(year => {
+    const active = selectedSet.has(year);
+    return `
+      <button
+        type="button"
+        class="chip-toggle ${active ? 'active' : ''}"
+        aria-pressed="${active ? 'true' : 'false'}"
+        onclick="toggleVisibleYear(${year})"
+      >
+        <span class="chip-toggle-marker">${active ? '✓' : '+'}</span>
+        <span>${year}</span>
+      </button>
+    `;
+  }).join('');
+}
+
+function toggleVisibleYear(year) {
+  const next = new Set(getVisibleYears());
+  if (next.has(year)) {
+    next.delete(year);
+  } else {
+    next.add(year);
+  }
+  visibleYears = [...next].sort((a, b) => a - b);
+  renderDashboard();
+}
+
+function selectAllVisibleYears() {
+  visibleYears = getAvailableYears();
+  renderDashboard();
+}
+
+function clearVisibleYears() {
+  visibleYears = [];
+  renderDashboard();
+}
+
+function filterDataByYear(dataByYear, years) {
+  const yearSet = new Set(years);
+  return Object.fromEntries(
+    Object.entries(dataByYear)
+      .filter(([year]) => yearSet.has(Number(year)))
+      .map(([year, values]) => [year, values])
+  );
+}
+
+function filterYearlyStats(yearlyStats, years) {
+  const yearSet = new Set(years);
+  const filteredEntries = Object.entries(yearlyStats)
+    .filter(([key]) => key === '__meta' || yearSet.has(Number(key)));
+  return Object.fromEntries(filteredEntries);
+}
+
 function showEmptyState() {
   currentDestination = null;
   currentIndicator = null;
+  visibleYears = [];
   destroyCharts();
   renderSidebar();
   document.getElementById('mainEmpty').style.display = 'block';
