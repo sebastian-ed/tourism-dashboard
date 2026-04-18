@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Dashboard · Indicadores de Turismo Argentina</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-badge">📊 Turismo</div>
+      <h1>Indicadores de Turismo</h1>
+      <p>República Argentina · 2025</p>
+    </div>
+    <div class="sidebar-section">Indicadores disponibles</div>
+    <div class="indicator-list" id="sidebarList">
+      <div style="padding:20px;text-align:center">
+        <div class="spinner" style="margin:0 auto"></div>
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <p style="font-size:11px;color:var(--text-muted);line-height:1.5">
+        Los datos se actualizan periódicamente.<br>
+        Fuente: Ministerio de Turismo de la Nación.
+      </p>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main-content">
+
+    <!-- Empty state -->
+    <div id="mainEmpty" class="empty-state">
+      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 8v4l3 3"/>
+      </svg>
+      <h3>Seleccioná un indicador</h3>
+      <p>Elegí un indicador del panel izquierdo para ver su evolución histórica</p>
+    </div>
+
+    <!-- Dashboard view -->
+    <div id="mainView" style="display:none">
+
+      <div class="topbar">
+        <div class="topbar-title">
+          <h2 id="viewTitle">—</h2>
+          <p id="viewDesc" style="color:var(--text-muted);font-size:13px"></p>
+        </div>
+        <div class="topbar-actions">
+          <button class="btn btn-secondary btn-sm" id="exportXlsxBtn" onclick="handleExcelExport()">⬇ Excel</button>
+          <button class="btn btn-primary btn-sm" id="exportPdfBtn" onclick="handlePdfExport()">⬇ PDF</button>
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpi-grid" id="kpiGrid"></div>
+
+      <!-- Charts -->
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <span class="chart-card-title">Evolución mensual por año</span>
+            <span class="badge badge-blue" id="yearsCount">0 años</span>
+          </div>
+          <div class="chart-wrap"><canvas id="lineChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <span class="chart-card-title">Totales anuales</span>
+          </div>
+          <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Stats table -->
+      <div class="table-card">
+        <div class="table-card-header">
+          <h3>Estadísticas por año</h3>
+          <span class="badge badge-green" id="statsUnit"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Año</th>
+                <th>Total</th>
+                <th>Promedio</th>
+                <th>Mediana</th>
+                <th>Mínimo</th>
+                <th>Máximo</th>
+                <th>Desvío Std</th>
+                <th>Var. interanual</th>
+              </tr>
+            </thead>
+            <tbody id="statsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Monthly table -->
+      <div class="table-card">
+        <div class="table-card-header">
+          <h3>Datos mensuales</h3>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table" id="monthlyTable"></table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/stats.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/exports.js"></script>
+<script>
+let indicators = [];
+let currentIndicator = null;
+let currentDataByYear = {};
+let currentYearlyStats = {};
+
+window.addEventListener('DOMContentLoaded', loadIndicators);
+
+async function loadIndicators() {
+  try {
+    indicators = await fetchIndicators();
+    renderSidebar();
+  } catch(e) {
+    document.getElementById('sidebarList').innerHTML =
+      '<p style="padding:16px;font-size:12px;color:var(--danger)">Error cargando datos</p>';
+  }
+}
+
+function renderSidebar() {
+  const list = document.getElementById('sidebarList');
+  if (!indicators.length) {
+    list.innerHTML = '<p style="padding:16px;font-size:12px;color:var(--text-muted)">No hay indicadores disponibles.</p>';
+    return;
+  }
+  list.innerHTML = indicators.map(ind => `
+    <div class="indicator-item ${currentIndicator?.id === ind.id ? 'active' : ''}"
+         onclick="selectIndicator('${ind.id}')">
+      <span class="ind-name">${ind.name}</span>
+      <span class="ind-unit">${ind.unit || ''}</span>
+    </div>
+  `).join('');
+}
+
+async function selectIndicator(id) {
+  currentIndicator = indicators.find(i => i.id === id);
+  renderSidebar();
+  const dps = await fetchDataPoints(currentIndicator.id);
+  currentDataByYear = buildDataByYear(dps);
+  currentYearlyStats = calcYearlyStats(currentDataByYear);
+  renderDashboard();
+  document.getElementById('mainEmpty').style.display = 'none';
+  document.getElementById('mainView').style.display = 'block';
+}
+
+function renderDashboard() {
+  const years = Object.keys(currentDataByYear).map(Number).sort();
+  document.getElementById('viewTitle').textContent = currentIndicator.name;
+  document.getElementById('viewDesc').textContent = currentIndicator.description || '';
+  document.getElementById('statsUnit').textContent = currentIndicator.unit || 'unidades';
+  document.getElementById('yearsCount').textContent = years.length + ' año' + (years.length !== 1 ? 's' : '');
+
+  // KPIs
+  const allVals = Object.values(currentDataByYear).flat().filter(v => v !== null && !isNaN(v)).map(Number);
+  const gs = calcStats(allVals);
+  const lastYear = years[years.length - 1];
+  const lastStats = currentYearlyStats[lastYear];
+
+  const kpis = [
+    { label: 'Promedio mensual', value: formatNumber(gs?.mean), sub: 'Histórico global', accent: 'var(--accent)' },
+    { label: `Total ${lastYear || '—'}`, value: formatNumber(lastStats?.sum), change: lastStats?.yoySum, accent: '#10B981' },
+    { label: 'Máximo mensual', value: formatNumber(gs?.max), sub: 'Histórico', accent: '#A855F7' },
+    { label: 'Mínimo mensual', value: formatNumber(gs?.min), sub: 'Histórico', accent: '#F97316' },
+    { label: 'Mediana mensual', value: formatNumber(gs?.median), sub: 'Histórico global', accent: '#06B6D4' },
+    { label: 'Desvío estándar', value: formatNumber(gs?.stdDev), sub: 'Variabilidad', accent: '#EAB308' },
+  ];
+
+  document.getElementById('kpiGrid').innerHTML = kpis.map(k => `
+    <div class="kpi-card" style="--accent-color:${k.accent}">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${k.value}</div>
+      ${k.change !== undefined && k.change !== null
+        ? `<div class="kpi-change ${k.change >= 0 ? 'up' : 'down'}">${k.change >= 0 ? '▲' : '▼'} ${formatPct(k.change)}</div>`
+        : k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
+    </div>
+  `).join('');
+
+  if (years.length) {
+    renderLineChart('lineChart', currentDataByYear, currentIndicator);
+    renderBarChart('barChart', currentYearlyStats, currentIndicator);
+  }
+
+  // Stats table
+  document.getElementById('statsBody').innerHTML = years.map(yr => {
+    const s = currentYearlyStats[yr];
+    const yoy = s?.yoySum;
+    return `<tr>
+      <td><strong>${yr}</strong></td>
+      <td>${formatNumber(s?.sum)}</td>
+      <td>${formatNumber(s?.mean)}</td>
+      <td>${formatNumber(s?.median)}</td>
+      <td>${formatNumber(s?.min)}</td>
+      <td>${formatNumber(s?.max)}</td>
+      <td>${formatNumber(s?.stdDev)}</td>
+      <td class="${yoy !== undefined && yoy !== null ? (yoy >= 0 ? 'positive' : 'negative') : ''}">
+        ${yoy !== undefined && yoy !== null ? formatPct(yoy) : '-'}
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Monthly table
+  const mt = document.getElementById('monthlyTable');
+  const header = `<thead><tr><th>Mes</th>${years.map(yr => `<th>${yr}</th>`).join('')}</tr></thead>`;
+  const rows = MONTHS.map((m, mi) => `
+    <tr>
+      <td>${m}</td>
+      ${years.map(yr => `<td>${formatNumber(currentDataByYear[yr]?.[mi])}</td>`).join('')}
+    </tr>
+  `).join('');
+  mt.innerHTML = header + `<tbody>${rows}</tbody>`;
+}
+
+async function handleExcelExport() {
+  if (!currentIndicator) return;
+  await exportToExcel(currentIndicator, currentDataByYear, currentYearlyStats);
+  toast('Excel generado ✓', 'success');
+}
+async function handlePdfExport() {
+  if (!currentIndicator) return;
+  await exportToPDF(currentIndicator, currentDataByYear, currentYearlyStats);
+  toast('PDF generado ✓', 'success');
+}
+
+function toast(msg, type = 'success') {
+  const container = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+</script>
+</body>
+</html>
