@@ -16,38 +16,40 @@ function buildExportFilename(indicator, ext) {
 async function exportToExcel(indicator, dataByYear, yearlyStats) {
   const wb = XLSX.utils.book_new();
 
-  const years = Object.keys(dataByYear).map(Number).sort();
+  const years = Object.keys(dataByYear).map(Number).sort((a, b) => a - b);
   const destinationName = indicator?.destination?.name || '';
+  const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(indicator));
 
   const header = ['Mes', ...years.map(String)];
   const rows = [];
   if (destinationName) rows.push(['Destino', destinationName]);
   rows.push(['Indicador', indicator.name]);
   rows.push(['Unidad', indicator.unit || '']);
+  rows.push(['Cálculo anual', annualMeta.label]);
   rows.push([]);
   rows.push(header);
 
   MONTHS.forEach((m, mi) => {
     rows.push([m, ...years.map(yr => dataByYear[yr][mi] ?? '')]);
   });
-  rows.push(['Total anual', ...years.map(yr => yearlyStats[yr]?.sum ?? '')]);
+  rows.push([annualMeta.shortLabel, ...years.map(yr => yearlyStats[yr]?.annualValue ?? '')]);
   const ws1 = XLSX.utils.aoa_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb, ws1, 'Datos');
 
-  const statsHeader = ['Año', 'Suma', 'Promedio', 'Mediana', 'Mínimo', 'Máximo', 'Desvío Std', 'Var. interanual suma %'];
+  const statsHeader = ['Año', annualMeta.shortLabel, 'Promedio', 'Mediana', 'Mínimo', 'Máximo', 'Desvío Std', 'Var. interanual'];
   const statsRows = [statsHeader];
   years.forEach(yr => {
     const s = yearlyStats[yr];
     if (!s) return;
     statsRows.push([
       yr,
-      s.sum ?? '',
+      s.annualValue ?? '',
       s.mean?.toFixed(2) ?? '',
       s.median?.toFixed(2) ?? '',
       s.min ?? '',
       s.max ?? '',
       s.stdDev?.toFixed(2) ?? '',
-      s.yoySum?.toFixed(1) ?? '',
+      s.yoyAnnual?.toFixed(1) ?? '',
     ]);
   });
   const ws2 = XLSX.utils.aoa_to_sheet(statsRows);
@@ -60,9 +62,10 @@ async function exportToPDF(indicator, dataByYear, yearlyStats) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-  const years = Object.keys(dataByYear).map(Number).sort();
+  const years = Object.keys(dataByYear).map(Number).sort((a, b) => a - b);
   const now = new Date().toLocaleDateString('es-AR');
   const destinationName = indicator?.destination?.name || '';
+  const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(indicator));
 
   doc.setFillColor(15, 23, 42);
   doc.rect(0, 0, 297, 210, 'F');
@@ -87,12 +90,14 @@ async function exportToPDF(indicator, dataByYear, yearlyStats) {
 
   doc.setFontSize(9);
   doc.setTextColor(100, 116, 139);
-  doc.text(`Generado: ${now}  ·  Unidad: ${indicator.unit || 'N/A'}`, 14, destinationName ? 58 : 52);
+  doc.text(`Generado: ${now}  ·  Unidad: ${indicator.unit || 'N/A'}  ·  Cálculo anual: ${annualMeta.label}`, 14, destinationName ? 58 : 52);
 
   const allVals = Object.values(dataByYear).flat().filter(v => v !== null && !isNaN(v));
   const globalStats = calcStats(allVals);
+  const lastYear = years[years.length - 1];
+  const lastAnnual = lastYear ? yearlyStats?.[lastYear]?.annualValue : null;
   const kpis = [
-    { label: 'Promedio global', value: formatNumber(globalStats?.mean) },
+    { label: annualMeta.shortLabel, value: formatNumber(lastAnnual) },
     { label: 'Máximo histórico', value: formatNumber(globalStats?.max) },
     { label: 'Mínimo histórico', value: formatNumber(globalStats?.min) },
     { label: 'Años cargados', value: String(years.length) },
@@ -124,14 +129,14 @@ async function exportToPDF(indicator, dataByYear, yearlyStats) {
     doc.addImage(lineImg, 'PNG', 14, 20, 269, 160);
   }
 
-  if (barCanvas) {
+  if (barCanvas && indicator?.annual_chart_visible !== false) {
     const barImg = barCanvas.toDataURL('image/png', 1.0);
     doc.addPage();
     doc.setFillColor(15, 23, 42);
     doc.rect(0, 0, 297, 210, 'F');
     doc.setTextColor(226, 232, 240);
     doc.setFontSize(13);
-    doc.text(`Totales anuales · ${buildExportLabel(indicator)}`, 14, 15);
+    doc.text(`${annualMeta.shortLabel} por año · ${buildExportLabel(indicator)}`, 14, 15);
     doc.addImage(barImg, 'PNG', 14, 20, 269, 160);
   }
 
@@ -142,18 +147,18 @@ async function exportToPDF(indicator, dataByYear, yearlyStats) {
   doc.setFontSize(13);
   doc.text(`Estadísticas por año · ${buildExportLabel(indicator)}`, 14, 15);
 
-  const tableHead = [['Año', 'Total', 'Promedio', 'Mediana', 'Mínimo', 'Máximo', 'Desvío Std', 'Var. interanual']];
+  const tableHead = [['Año', annualMeta.shortLabel, 'Promedio', 'Mediana', 'Mínimo', 'Máximo', 'Desvío Std', 'Var. interanual']];
   const tableBody = years.map(yr => {
     const s = yearlyStats[yr];
     return [
       String(yr),
-      formatNumber(s?.sum),
+      formatNumber(s?.annualValue),
       formatNumber(s?.mean),
       formatNumber(s?.median),
       formatNumber(s?.min),
       formatNumber(s?.max),
       formatNumber(s?.stdDev),
-      s?.yoySum !== undefined ? formatPct(s.yoySum) : '-',
+      s?.yoyAnnual !== undefined ? formatPct(s.yoyAnnual) : '-',
     ];
   });
 

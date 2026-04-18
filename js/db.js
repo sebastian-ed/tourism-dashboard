@@ -73,44 +73,69 @@ async function deleteDestination(id) {
 }
 
 // ── INDICATORS ─────────────────────────────────────────────
+function normalizeIndicatorRow(item) {
+  return {
+    ...item,
+    annual_calc_mode: item.annual_calc_mode || 'sum',
+    annual_chart_visible: item.annual_chart_visible !== false,
+    metric_key: item.metric_key || '',
+    formula_numerator_key: item.formula_numerator_key || '',
+    formula_denominator_key: item.formula_denominator_key || '',
+    formula_multiplier: item.formula_multiplier === null || item.formula_multiplier === undefined ? 1 : Number(item.formula_multiplier),
+    destination: item.destinations || null,
+  };
+}
+
 async function fetchIndicators() {
   const { data, error } = await getSupabase()
     .from('indicators')
     .select('*, destinations(id, name, slug)')
     .order('name', { ascending: true });
   if (error) throw error;
-  return (data || []).map(item => ({
-    ...item,
-    destination: item.destinations || null,
-  }));
+  return (data || []).map(normalizeIndicatorRow);
 }
 
-async function createIndicator(name, description, unit, destinationId) {
+async function createIndicator(payload) {
   const { data, error } = await getSupabase()
     .from('indicators')
     .insert({
-      name: name.trim(),
-      description,
-      unit,
-      destination_id: destinationId || null,
+      name: payload.name.trim(),
+      description: payload.description || '',
+      unit: payload.unit || '',
+      destination_id: payload.destination_id || null,
+      annual_calc_mode: payload.annual_calc_mode || 'sum',
+      annual_chart_visible: payload.annual_chart_visible !== false,
+      metric_key: payload.metric_key || '',
+      formula_numerator_key: payload.formula_numerator_key || null,
+      formula_denominator_key: payload.formula_denominator_key || null,
+      formula_multiplier: payload.formula_multiplier === '' || payload.formula_multiplier === null || payload.formula_multiplier === undefined ? 1 : Number(payload.formula_multiplier),
     })
     .select('*, destinations(id, name, slug)')
     .single();
   if (error) throw error;
-  return {
-    ...data,
-    destination: data.destinations || null,
-  };
+  return normalizeIndicatorRow(data);
 }
 
 async function updateIndicator(id, fields) {
+  const payload = {
+    ...fields,
+    destination_id: fields.destination_id || null,
+    updated_at: new Date().toISOString(),
+  };
+  if (Object.prototype.hasOwnProperty.call(payload, 'formula_numerator_key') && !payload.formula_numerator_key) {
+    payload.formula_numerator_key = null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'formula_denominator_key') && !payload.formula_denominator_key) {
+    payload.formula_denominator_key = null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'formula_multiplier')) {
+    payload.formula_multiplier = payload.formula_multiplier === '' || payload.formula_multiplier === null || payload.formula_multiplier === undefined
+      ? 1
+      : Number(payload.formula_multiplier);
+  }
   const { error } = await getSupabase()
     .from('indicators')
-    .update({
-      ...fields,
-      destination_id: fields.destination_id || null,
-      updated_at: new Date().toISOString(),
-    })
+    .update(payload)
     .eq('id', id);
   if (error) throw error;
 }
@@ -135,6 +160,21 @@ async function fetchDataPoints(indicatorId) {
   return data || [];
 }
 
+async function fetchDataPointsForIndicators(indicatorIds) {
+  if (!indicatorIds || !indicatorIds.length) return [];
+  const uniqueIds = [...new Set(indicatorIds.filter(Boolean))];
+  if (!uniqueIds.length) return [];
+  const { data, error } = await getSupabase()
+    .from('data_points')
+    .select('*')
+    .in('indicator_id', uniqueIds)
+    .order('indicator_id', { ascending: true })
+    .order('year', { ascending: true })
+    .order('month', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
 async function upsertDataPoints(points) {
   const { error } = await getSupabase()
     .from('data_points')
@@ -151,6 +191,23 @@ async function deleteDataPointsForYear(indicatorId, year) {
   if (error) throw error;
 }
 
+async function deleteDataPointsForYears(indicatorId, years) {
+  if (!years || !years.length) return;
+  const { error } = await getSupabase()
+    .from('data_points')
+    .delete()
+    .eq('indicator_id', indicatorId)
+    .in('year', years);
+  if (error) throw error;
+}
+
+async function deleteAllDataPointsForIndicator(indicatorId) {
+  const { error } = await getSupabase()
+    .from('data_points')
+    .delete()
+    .eq('indicator_id', indicatorId);
+  if (error) throw error;
+}
 
 async function fetchIndicatorsWithData(indicatorIds) {
   if (!indicatorIds || !indicatorIds.length) return new Set();

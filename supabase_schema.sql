@@ -1,8 +1,9 @@
--- Tourism Dashboard - Schema + migration segura para agrupar indicadores por destino
+-- Tourism Dashboard - Schema + migración segura
 -- Ejecutar completo en Supabase SQL Editor.
--- Si ya tenías datos, el script agrega la estructura nueva y mueve los indicadores existentes al destino "General".
+-- Agrega destinos, agrupación comparable y cálculo anual configurable por indicador.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS unaccent;
 
 -- ── DESTINATIONS ───────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS destinations (
@@ -33,14 +34,37 @@ CREATE TABLE IF NOT EXISTS indicators (
 );
 
 ALTER TABLE indicators
-  ADD COLUMN IF NOT EXISTS destination_id UUID REFERENCES destinations(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS destination_id UUID REFERENCES destinations(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS annual_calc_mode TEXT DEFAULT 'sum',
+  ADD COLUMN IF NOT EXISTS annual_chart_visible BOOLEAN DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS metric_key TEXT,
+  ADD COLUMN IF NOT EXISTS formula_numerator_key TEXT,
+  ADD COLUMN IF NOT EXISTS formula_denominator_key TEXT,
+  ADD COLUMN IF NOT EXISTS formula_multiplier NUMERIC DEFAULT 1;
 
 UPDATE indicators
 SET destination_id = (SELECT id FROM destinations WHERE slug = 'general' LIMIT 1)
 WHERE destination_id IS NULL;
 
+UPDATE indicators
+SET metric_key = LOWER(REGEXP_REPLACE(unaccent(COALESCE(name, '')), '[^a-zA-Z0-9]+', '-', 'g'))
+WHERE metric_key IS NULL OR metric_key = '';
+
+UPDATE indicators
+SET annual_calc_mode = 'sum'
+WHERE annual_calc_mode IS NULL OR annual_calc_mode = '';
+
+UPDATE indicators
+SET annual_chart_visible = TRUE
+WHERE annual_chart_visible IS NULL;
+
+UPDATE indicators
+SET formula_multiplier = 1
+WHERE formula_multiplier IS NULL;
+
 CREATE INDEX IF NOT EXISTS idx_indicators_destination ON indicators(destination_id);
 CREATE INDEX IF NOT EXISTS idx_indicators_name ON indicators(name);
+CREATE INDEX IF NOT EXISTS idx_indicators_metric_key ON indicators(metric_key);
 
 -- ── DATA POINTS ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS data_points (

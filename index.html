@@ -30,13 +30,51 @@
 
     <div class="sidebar-footer">
       <p style="font-size:11px;color:var(--text-muted);line-height:1.5">
-        Agrupación por destino para navegar más rápido.<br>
-        Los gráficos y exportaciones conservan la lógica original.
+        La comparación entre destinos usa la fórmula anual que definas por indicador.
       </p>
     </div>
   </aside>
 
   <main class="main-content">
+    <div class="comparison-card">
+      <div class="comparison-card-header">
+        <h3>Comparar destinos</h3>
+        <span class="badge badge-blue" id="compareSummaryBadge">Sin comparación</span>
+      </div>
+      <div class="comparison-card-body">
+        <div class="comparison-controls">
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Indicador comparable</label>
+            <select id="compareMetricKey" class="form-control" onchange="handleComparisonMetricChange()"></select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Destinos a comparar</label>
+            <div id="compareDestinationList" class="compare-destination-list"></div>
+          </div>
+          <button class="btn btn-primary" onclick="runComparison()">Comparar</button>
+        </div>
+        <p class="comparison-note">No compara “sumas porque sí”. Respeta la configuración anual de cada indicador: suma, promedio, último valor o ratio recalculado.</p>
+        <div id="compareEmpty" class="empty-compare">Elegí un indicador comparable y por lo menos dos destinos.</div>
+        <div id="compareResults" style="display:none">
+          <div class="chart-card" style="margin-bottom:16px">
+            <div class="chart-card-header">
+              <span class="chart-card-title" id="compareChartTitle">Comparación anual</span>
+              <span class="chart-card-note" id="compareChartNote"></span>
+            </div>
+            <div class="chart-wrap"><canvas id="comparisonChart"></canvas></div>
+          </div>
+          <div class="table-card" style="margin-bottom:0">
+            <div class="table-card-header">
+              <h3>Tabla comparativa</h3>
+            </div>
+            <div style="overflow-x:auto">
+              <table class="data-table" id="comparisonTable"></table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="mainEmpty" class="empty-state">
       <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
         <circle cx="12" cy="12" r="10"/>
@@ -75,9 +113,7 @@
         <span class="badge badge-green">Seleccioná uno para abrir el dashboard</span>
       </div>
       <div class="destination-cards" id="destinationCards"></div>
-      <div class="empty-indicators" id="destinationCardsEmpty" style="display:none">
-        Todavía no hay indicadores asociados a este destino.
-      </div>
+      <div class="empty-indicators" id="destinationCardsEmpty" style="display:none">Todavía no hay indicadores asociados a este destino.</div>
     </div>
 
     <div id="mainView" style="display:none">
@@ -91,8 +127,18 @@
         </div>
         <div class="topbar-actions">
           <button class="btn btn-secondary btn-sm" onclick="showCurrentDestinationOverview()">← Volver al destino</button>
-          <button class="btn btn-secondary btn-sm" id="exportXlsxBtn" onclick="handleExcelExport()">⬇ Excel</button>
-          <button class="btn btn-primary btn-sm" id="exportPdfBtn" onclick="handlePdfExport()">⬇ PDF</button>
+          <button class="btn btn-secondary btn-sm" onclick="handleExcelExport()">⬇ Excel</button>
+          <button class="btn btn-primary btn-sm" onclick="handlePdfExport()">⬇ PDF</button>
+        </div>
+      </div>
+
+      <div class="helper-card">
+        <div class="helper-card-header">
+          <h3>Regla anual aplicada</h3>
+          <span class="badge badge-green" id="annualCalcBadge">—</span>
+        </div>
+        <div class="helper-card-body">
+          <p class="help-text" id="annualCalcHelp">—</p>
         </div>
       </div>
 
@@ -106,9 +152,10 @@
           </div>
           <div class="chart-wrap"><canvas id="lineChart"></canvas></div>
         </div>
-        <div class="chart-card">
+        <div class="chart-card" id="annualChartCard">
           <div class="chart-card-header">
-            <span class="chart-card-title">Totales anuales</span>
+            <span class="chart-card-title" id="annualChartTitle">Total anual</span>
+            <span class="chart-card-note" id="annualChartNote"></span>
           </div>
           <div class="chart-wrap"><canvas id="barChart"></canvas></div>
         </div>
@@ -124,8 +171,8 @@
             <thead>
               <tr>
                 <th>Año</th>
-                <th>Total</th>
-                <th>Promedio</th>
+                <th id="statsAnnualHeader">Total</th>
+                <th>Promedio mensual</th>
                 <th>Mediana</th>
                 <th>Mínimo</th>
                 <th>Máximo</th>
@@ -163,19 +210,22 @@
 <script src="js/charts.js"></script>
 <script src="js/exports.js"></script>
 <script>
+const UNASSIGNED_DESTINATION_ID = '__unassigned__';
+
 let destinations = [];
 let indicators = [];
 let currentDestination = null;
 let currentIndicator = null;
 let currentDataByYear = {};
 let currentYearlyStats = {};
-const UNASSIGNED_DESTINATION_ID = '__unassigned__';
+let comparisonSelection = { metricKey: '', destinationIds: [] };
 
 window.addEventListener('DOMContentLoaded', initApp);
 
 async function initApp() {
   try {
     await Promise.all([loadDestinations(), loadIndicators()]);
+    renderComparisonControls();
     const initialDestination = getRenderableDestinations()[0];
     if (initialDestination) {
       await selectDestination(initialDestination.id);
@@ -183,8 +233,7 @@ async function initApp() {
       showEmptyState();
     }
   } catch (e) {
-    document.getElementById('destinationList').innerHTML =
-      '<p style="padding:16px;font-size:12px;color:var(--danger)">Error cargando destinos e indicadores</p>';
+    document.getElementById('destinationList').innerHTML = '<p style="padding:16px;font-size:12px;color:var(--danger)">Error cargando destinos e indicadores</p>';
   }
 }
 
@@ -220,8 +269,28 @@ function getDestinationById(destinationId) {
   return getRenderableDestinations().find(dest => dest.id === destinationId) || null;
 }
 
-function countIndicatorsWithData(destinationId) {
-  return getIndicatorsForDestination(destinationId).filter(ind => !!ind.has_data).length;
+function getUniqueMetricOptions() {
+  const byKey = new Map();
+  indicators.forEach(ind => {
+    const key = getMetricKey(ind);
+    if (!key) return;
+    if (!byKey.has(key)) byKey.set(key, { key, label: ind.name, unit: ind.unit || '' });
+  });
+  return [...byKey.values()].sort((a, b) => a.label.localeCompare(b.label, 'es'));
+}
+
+async function hydrateDestinationDataStatus(destinationId) {
+  const destinationIndicators = getIndicatorsForDestination(destinationId);
+  const ids = destinationIndicators.map(ind => ind.id);
+  if (!ids.length) return;
+  try {
+    const presence = await fetchIndicatorsWithData(ids);
+    indicators.forEach(ind => {
+      if (ids.includes(ind.id)) ind.has_data = presence.has(ind.id);
+    });
+  } catch (e) {
+    // no-op
+  }
 }
 
 function renderSidebar() {
@@ -261,7 +330,7 @@ function renderSidebar() {
     <button class="indicator-item ${currentIndicator?.id === ind.id ? 'active' : ''}" onclick="selectIndicator('${ind.id}')">
       <span class="indicator-main">
         <span class="ind-name">${escapeHtml(ind.name)}</span>
-        <span class="ind-unit">${ind.unit || 'sin unidad'}</span>
+        <span class="ind-unit">${escapeHtml(ind.unit || 'sin unidad')}</span>
       </span>
       ${ind.has_data ? '<span class="badge badge-green">datos</span>' : '<span class="badge badge-orange">vacío</span>'}
     </button>
@@ -280,21 +349,6 @@ async function selectDestination(destinationId) {
   await hydrateDestinationDataStatus(destinationId);
   renderSidebar();
   showCurrentDestinationOverview();
-}
-
-
-async function hydrateDestinationDataStatus(destinationId) {
-  const destinationIndicators = getIndicatorsForDestination(destinationId);
-  const ids = destinationIndicators.map(ind => ind.id);
-  if (!ids.length) return;
-  try {
-    const presence = await fetchIndicatorsWithData(ids);
-    indicators.forEach(ind => {
-      if (ids.includes(ind.id)) ind.has_data = presence.has(ind.id);
-    });
-  } catch (e) {
-    // no-op: la vista sigue funcionando aunque no se pueda pintar el estado rápido
-  }
 }
 
 function showCurrentDestinationOverview() {
@@ -326,21 +380,28 @@ function showCurrentDestinationOverview() {
     empty.style.display = 'block';
   } else {
     empty.style.display = 'none';
-    cards.innerHTML = items.map(ind => `
-      <article class="indicator-overview-card">
-        <div>
-          <h4>${escapeHtml(ind.name)}</h4>
-          <p>${escapeHtml(ind.description || 'Sin descripción cargada.')}</p>
-        </div>
-        <div class="indicator-overview-meta">
-          <span>${escapeHtml(ind.unit || 'sin unidad')}</span>
-          <span>${ind.has_data ? 'Con datos' : 'Sin datos'}</span>
-        </div>
-        <div class="card-actions">
-          <button class="btn btn-primary btn-sm" onclick="selectIndicator('${ind.id}')">Ver indicador</button>
-        </div>
-      </article>
-    `).join('');
+    cards.innerHTML = items.map(ind => {
+      const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(ind));
+      return `
+        <article class="indicator-overview-card">
+          <div>
+            <h4>${escapeHtml(ind.name)}</h4>
+            <p>${escapeHtml(ind.description || 'Sin descripción cargada.')}</p>
+          </div>
+          <div class="indicator-overview-meta">
+            <span>${escapeHtml(ind.unit || 'sin unidad')}</span>
+            <span>${annualMeta.shortLabel}</span>
+          </div>
+          <div class="indicator-overview-meta">
+            <span>${ind.has_data ? 'Con datos' : 'Sin datos'}</span>
+            <span>${getMetricKey(ind) || 'sin clave comparable'}</span>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-primary btn-sm" onclick="selectIndicator('${ind.id}')">Ver indicador</button>
+          </div>
+        </article>
+      `;
+    }).join('');
   }
 
   document.getElementById('mainEmpty').style.display = 'none';
@@ -357,10 +418,15 @@ async function selectIndicator(id) {
   renderSidebar();
 
   try {
-    const dps = await fetchDataPoints(currentIndicator.id);
-    currentIndicator.has_data = dps.length > 0;
-    currentDataByYear = buildDataByYear(dps);
-    currentYearlyStats = calcYearlyStats(currentDataByYear);
+    const destinationIndicators = getIndicatorsForDestination(destinationId);
+    const destinationIds = destinationIndicators.map(ind => ind.id);
+    const allPoints = await fetchDataPointsForIndicators(destinationIds);
+    const dataByIndicator = buildDataByIndicator(allPoints);
+    const currentPoints = dataByIndicator[currentIndicator.id] || [];
+    currentIndicator.has_data = currentPoints.length > 0;
+    currentDataByYear = buildDataByYear(currentPoints);
+    const relatedSeriesMap = buildRelatedSeriesMapForDestination(currentIndicator, destinationIndicators, dataByIndicator);
+    currentYearlyStats = calcYearlyStats(currentDataByYear, { indicator: currentIndicator, relatedSeriesMap });
     renderDashboard();
     document.getElementById('mainEmpty').style.display = 'none';
     document.getElementById('destinationOverview').style.display = 'none';
@@ -371,12 +437,18 @@ async function selectIndicator(id) {
 }
 
 function renderDashboard() {
-  const years = Object.keys(currentDataByYear).map(Number).sort();
+  const years = Object.keys(currentDataByYear).map(Number).sort((a, b) => a - b);
+  const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(currentIndicator));
   document.getElementById('viewTitle').textContent = currentIndicator.name;
   document.getElementById('viewDesc').textContent = currentIndicator.description || '';
   document.getElementById('viewDestinationBadge').textContent = currentDestination?.name || 'Sin destino';
   document.getElementById('statsUnit').textContent = currentIndicator.unit || 'unidades';
   document.getElementById('yearsCount').textContent = years.length + ' año' + (years.length !== 1 ? 's' : '');
+  document.getElementById('statsAnnualHeader').textContent = annualMeta.shortLabel;
+  document.getElementById('annualChartTitle').textContent = annualMeta.shortLabel;
+  document.getElementById('annualChartNote').textContent = currentIndicator.annual_chart_visible === false ? 'Oculto por configuración' : annualMeta.description;
+  document.getElementById('annualCalcBadge').textContent = annualMeta.label;
+  document.getElementById('annualCalcHelp').textContent = annualMeta.description;
 
   const allVals = Object.values(currentDataByYear).flat().filter(v => v !== null && !isNaN(v)).map(Number);
   const gs = calcStats(allVals);
@@ -385,7 +457,7 @@ function renderDashboard() {
 
   const kpis = [
     { label: 'Promedio mensual', value: formatNumber(gs?.mean), sub: 'Histórico global', accent: 'var(--accent)' },
-    { label: `Total ${lastYear || '—'}`, value: formatNumber(lastStats?.sum), change: lastStats?.yoySum, accent: '#10B981' },
+    { label: `${annualMeta.shortLabel} ${lastYear || '—'}`, value: formatNumber(lastStats?.annualValue), change: lastStats?.yoyAnnual, accent: '#10B981' },
     { label: 'Máximo mensual', value: formatNumber(gs?.max), sub: 'Histórico', accent: '#A855F7' },
     { label: 'Mínimo mensual', value: formatNumber(gs?.min), sub: 'Histórico', accent: '#F97316' },
     { label: 'Mediana mensual', value: formatNumber(gs?.median), sub: 'Histórico global', accent: '#06B6D4' },
@@ -396,24 +468,27 @@ function renderDashboard() {
     <div class="kpi-card" style="--accent-color:${k.accent}">
       <div class="kpi-label">${k.label}</div>
       <div class="kpi-value">${k.value}</div>
-      ${k.change !== undefined && k.change !== null
-        ? `<div class="kpi-change ${k.change >= 0 ? 'up' : 'down'}">${k.change >= 0 ? '▲' : '▼'} ${formatPct(k.change)}</div>`
-        : k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
+      ${k.change !== undefined && k.change !== null ? `<div class="kpi-change ${k.change >= 0 ? 'up' : 'down'}">${k.change >= 0 ? '▲' : '▼'} ${formatPct(k.change)}</div>` : k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
     </div>
   `).join('');
 
   destroyCharts();
-  if (years.length) {
-    renderLineChart('lineChart', currentDataByYear, currentIndicator);
+  renderLineChart('lineChart', currentDataByYear, currentIndicator);
+
+  const annualChartCard = document.getElementById('annualChartCard');
+  if (currentIndicator.annual_chart_visible === false || getIndicatorCalcMode(currentIndicator) === 'none') {
+    annualChartCard.style.display = 'none';
+  } else {
+    annualChartCard.style.display = 'block';
     renderBarChart('barChart', currentYearlyStats, currentIndicator);
   }
 
   document.getElementById('statsBody').innerHTML = years.map(yr => {
     const s = currentYearlyStats[yr];
-    const yoy = s?.yoySum;
+    const yoy = s?.yoyAnnual;
     return `<tr>
       <td><strong>${yr}</strong></td>
-      <td>${formatNumber(s?.sum)}</td>
+      <td>${formatNumber(s?.annualValue)}</td>
       <td>${formatNumber(s?.mean)}</td>
       <td>${formatNumber(s?.median)}</td>
       <td>${formatNumber(s?.min)}</td>
@@ -442,6 +517,143 @@ function showEmptyState() {
   document.getElementById('mainEmpty').style.display = 'block';
   document.getElementById('destinationOverview').style.display = 'none';
   document.getElementById('mainView').style.display = 'none';
+}
+
+function renderComparisonControls() {
+  const metricSelect = document.getElementById('compareMetricKey');
+  const options = getUniqueMetricOptions();
+  if (!options.length) {
+    metricSelect.innerHTML = '<option value="">No hay indicadores comparables</option>';
+    document.getElementById('compareDestinationList').innerHTML = '';
+    return;
+  }
+
+  const selectedMetric = options.find(opt => opt.key === comparisonSelection.metricKey)?.key || comparisonSelection.metricKey || options[0].key;
+  comparisonSelection.metricKey = selectedMetric;
+  metricSelect.innerHTML = options.map(opt => `<option value="${opt.key}" ${selectedMetric === opt.key ? 'selected' : ''}>${escapeHtml(opt.label)} · ${escapeHtml(opt.key)}</option>`).join('');
+  renderComparisonDestinationChoices();
+}
+
+function renderComparisonDestinationChoices() {
+  const metricKey = comparisonSelection.metricKey;
+  const relevantIndicators = indicators.filter(ind => getMetricKey(ind) === metricKey && ind.destination_id);
+  const destinationIds = [...new Set(relevantIndicators.map(ind => ind.destination_id))];
+  const availableDestinations = destinations.filter(dest => destinationIds.includes(dest.id));
+  const defaultSelection = comparisonSelection.destinationIds.filter(id => destinationIds.includes(id));
+  comparisonSelection.destinationIds = defaultSelection.length ? defaultSelection : availableDestinations.slice(0, 2).map(dest => dest.id);
+
+  const container = document.getElementById('compareDestinationList');
+  if (!availableDestinations.length) {
+    container.innerHTML = '<span class="help-text">No hay destinos comparables para esa clave.</span>';
+    return;
+  }
+
+  container.innerHTML = availableDestinations.map(dest => {
+    const checked = comparisonSelection.destinationIds.includes(dest.id);
+    return `
+      <label class="chip-checkbox ${checked ? 'active' : ''}">
+        <input type="checkbox" value="${dest.id}" ${checked ? 'checked' : ''} onchange="toggleComparisonDestination('${dest.id}', this.checked)"/>
+        ${escapeHtml(dest.name)}
+      </label>
+    `;
+  }).join('');
+}
+
+function handleComparisonMetricChange() {
+  comparisonSelection.metricKey = document.getElementById('compareMetricKey').value;
+  comparisonSelection.destinationIds = [];
+  renderComparisonDestinationChoices();
+  clearComparisonResults();
+}
+
+function toggleComparisonDestination(destinationId, checked) {
+  const next = new Set(comparisonSelection.destinationIds);
+  if (checked) next.add(destinationId);
+  else next.delete(destinationId);
+  comparisonSelection.destinationIds = [...next];
+  renderComparisonDestinationChoices();
+}
+
+function clearComparisonResults() {
+  destroyComparisonChart();
+  document.getElementById('compareEmpty').style.display = 'block';
+  document.getElementById('compareResults').style.display = 'none';
+  document.getElementById('compareSummaryBadge').textContent = 'Sin comparación';
+}
+
+async function runComparison() {
+  const metricKey = comparisonSelection.metricKey;
+  const destinationIds = comparisonSelection.destinationIds;
+  if (!metricKey) {
+    toast('Elegí un indicador comparable.', 'error');
+    return;
+  }
+  if (destinationIds.length < 2) {
+    toast('Seleccioná al menos dos destinos para comparar.', 'error');
+    return;
+  }
+
+  const selectedIndicators = destinationIds
+    .map(destId => indicators.find(ind => ind.destination_id === destId && getMetricKey(ind) === metricKey))
+    .filter(Boolean);
+  if (selectedIndicators.length < 2) {
+    toast('No encontré suficientes indicadores comparables.', 'error');
+    return;
+  }
+
+  try {
+    const destinationIndicatorIds = [...new Set(destinationIds.flatMap(destId => getIndicatorsForDestination(destId).map(ind => ind.id)))];
+    const allPoints = await fetchDataPointsForIndicators(destinationIndicatorIds);
+    const dataByIndicator = buildDataByIndicator(allPoints);
+    const yearsSet = new Set();
+    const series = [];
+
+    selectedIndicators.forEach(indicator => {
+      const destinationIndicators = getIndicatorsForDestination(indicator.destination_id);
+      const relatedSeriesMap = buildRelatedSeriesMapForDestination(indicator, destinationIndicators, dataByIndicator);
+      const dataByYear = buildDataByYear(dataByIndicator[indicator.id] || []);
+      const yearlyStats = calcYearlyStats(dataByYear, { indicator, relatedSeriesMap });
+      const annualSeries = buildAnnualSeries(yearlyStats);
+      annualSeries.years.forEach(year => yearsSet.add(year));
+      series.push({
+        indicator,
+        destinationName: indicator.destination?.name || 'Sin destino',
+        yearlyStats,
+      });
+    });
+
+    const years = [...yearsSet].sort((a, b) => a - b);
+    const chartSeries = series.map(item => ({
+      label: item.destinationName,
+      values: years.map(year => item.yearlyStats?.[year]?.annualValue ?? null),
+    }));
+
+    renderComparisonChart('comparisonChart', {
+      years,
+      series: chartSeries,
+      unit: selectedIndicators[0]?.unit || '',
+    });
+
+    const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(selectedIndicators[0]));
+    document.getElementById('compareChartTitle').textContent = `${selectedIndicators[0].name} · comparación entre destinos`;
+    document.getElementById('compareChartNote').textContent = annualMeta.shortLabel;
+    document.getElementById('compareSummaryBadge').textContent = `${destinationIds.length} destinos`;
+
+    const table = document.getElementById('comparisonTable');
+    const header = `<thead><tr><th>Destino</th>${years.map(year => `<th>${year}</th>`).join('')}</tr></thead>`;
+    const rows = series.map(item => `
+      <tr>
+        <td>${escapeHtml(item.destinationName)}</td>
+        ${years.map(year => `<td>${formatNumber(item.yearlyStats?.[year]?.annualValue)}</td>`).join('')}
+      </tr>
+    `).join('');
+    table.innerHTML = header + `<tbody>${rows}</tbody>`;
+
+    document.getElementById('compareEmpty').style.display = 'none';
+    document.getElementById('compareResults').style.display = 'block';
+  } catch (e) {
+    toast('Error armando la comparación: ' + e.message, 'error');
+  }
 }
 
 async function handleExcelExport() {

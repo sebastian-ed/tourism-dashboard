@@ -57,6 +57,45 @@
   </aside>
 
   <main class="main-content">
+    <div class="comparison-card">
+      <div class="comparison-card-header">
+        <h3>Comparar destinos</h3>
+        <span class="badge badge-blue" id="compareSummaryBadge">Sin comparación</span>
+      </div>
+      <div class="comparison-card-body">
+        <div class="comparison-controls">
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Indicador comparable</label>
+            <select id="compareMetricKey" class="form-control" onchange="handleComparisonMetricChange()"></select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Destinos a comparar</label>
+            <div id="compareDestinationList" class="compare-destination-list"></div>
+          </div>
+          <button class="btn btn-primary" onclick="runComparison()">Comparar</button>
+        </div>
+        <p class="comparison-note">La comparación usa la fórmula anual definida en cada indicador. Si configurás TOH, TOP o estadía con numerador/denominador, acá también respeta esa lógica.</p>
+        <div id="compareEmpty" class="empty-compare">Elegí un indicador comparable y por lo menos dos destinos.</div>
+        <div id="compareResults" style="display:none">
+          <div class="chart-card" style="margin-bottom:16px">
+            <div class="chart-card-header">
+              <span class="chart-card-title" id="compareChartTitle">Comparación anual</span>
+              <span class="chart-card-note" id="compareChartNote"></span>
+            </div>
+            <div class="chart-wrap"><canvas id="comparisonChart"></canvas></div>
+          </div>
+          <div class="table-card" style="margin-bottom:0">
+            <div class="table-card-header">
+              <h3>Tabla comparativa</h3>
+            </div>
+            <div style="overflow-x:auto">
+              <table class="data-table" id="comparisonTable"></table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="mainEmpty" class="empty-state">
       <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M9 19v-6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2zm0 0V9a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v10m-6 0a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2m0 0V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v14a2 2 0 0 0 2 2h-2a2 2 0 0 1-2-2z"/>
@@ -97,9 +136,7 @@
         </div>
       </div>
       <div class="destination-cards" id="destinationCards"></div>
-      <div class="empty-indicators" id="destinationCardsEmpty" style="display:none">
-        Este destino no tiene indicadores. Creá el primero y dejá de administrarlo por intuición.
-      </div>
+      <div class="empty-indicators" id="destinationCardsEmpty" style="display:none">Este destino no tiene indicadores. Creá el primero y dejá de administrarlo por intuición.</div>
     </div>
 
     <div id="mainView" style="display:none">
@@ -113,10 +150,21 @@
         </div>
         <div class="topbar-actions">
           <button class="btn btn-secondary btn-sm" onclick="showCurrentDestinationOverview()">← Volver al destino</button>
+          <a href="../index.html" class="btn btn-ghost btn-sm" target="_blank">Ver público ↗</a>
           <button class="btn btn-secondary btn-sm" onclick="openEditIndicatorModal()">✏️ Editar</button>
           <button class="btn btn-secondary btn-sm" onclick="openDataModal()">📋 Cargar datos</button>
-          <button class="btn btn-secondary btn-sm" id="exportXlsxBtn" onclick="handleExcelExport()">⬇ Excel</button>
-          <button class="btn btn-primary btn-sm" id="exportPdfBtn" onclick="handlePdfExport()">⬇ PDF</button>
+          <button class="btn btn-secondary btn-sm" onclick="handleExcelExport()">⬇ Excel</button>
+          <button class="btn btn-primary btn-sm" onclick="handlePdfExport()">⬇ PDF</button>
+        </div>
+      </div>
+
+      <div class="helper-card">
+        <div class="helper-card-header">
+          <h3>Regla anual aplicada</h3>
+          <span class="badge badge-green" id="annualCalcBadge">—</span>
+        </div>
+        <div class="helper-card-body">
+          <p class="help-text" id="annualCalcHelp">—</p>
         </div>
       </div>
 
@@ -130,9 +178,10 @@
           </div>
           <div class="chart-wrap"><canvas id="lineChart"></canvas></div>
         </div>
-        <div class="chart-card">
+        <div class="chart-card" id="annualChartCard">
           <div class="chart-card-header">
-            <span class="chart-card-title">Totales anuales</span>
+            <span class="chart-card-title" id="annualChartTitle">Total anual</span>
+            <span class="chart-card-note" id="annualChartNote"></span>
           </div>
           <div class="chart-wrap"><canvas id="barChart"></canvas></div>
         </div>
@@ -144,12 +193,12 @@
           <span class="badge badge-green" id="statsUnit"></span>
         </div>
         <div style="overflow-x:auto">
-          <table class="data-table" id="statsTable">
+          <table class="data-table">
             <thead>
               <tr>
                 <th>Año</th>
-                <th>Total</th>
-                <th>Promedio</th>
+                <th id="statsAnnualHeader">Total</th>
+                <th>Promedio mensual</th>
                 <th>Mediana</th>
                 <th>Mínimo</th>
                 <th>Máximo</th>
@@ -175,20 +224,22 @@
 </div>
 
 <div id="destinationModal" class="modal-overlay" onclick="if(event.target===this)closeDestinationModal()">
-  <div class="modal" style="max-width:560px">
+  <div class="modal" style="max-width:640px">
     <div class="modal-header">
       <h2 id="destinationModalTitle">Nuevo destino</h2>
       <button class="btn btn-ghost" onclick="closeDestinationModal()">✕</button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="destinationId"/>
-      <div class="form-group">
-        <label class="form-label">Nombre del destino *</label>
-        <input id="destinationName" class="form-control" placeholder="Ej: Mar del Plata"/>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Orden (opcional)</label>
-        <input id="destinationOrder" type="number" class="form-control" placeholder="Ej: 10"/>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Nombre *</label>
+          <input id="destinationName" class="form-control" placeholder="Ej: Mar del Plata"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Orden</label>
+          <input id="destinationOrder" type="number" class="form-control" placeholder="Ej: 10"/>
+        </div>
       </div>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap">
         <button class="btn btn-secondary" onclick="closeDestinationModal()">Cancelar</button>
@@ -214,17 +265,61 @@
         </div>
         <div class="form-group">
           <label class="form-label">Unidad</label>
-          <input id="indUnit" class="form-control" placeholder="Ej: unidades, %, turistas"/>
+          <input id="indUnit" class="form-control" placeholder="Ej: %, viajeros, plazas, establecimientos"/>
         </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Nombre *</label>
-        <input id="indName" class="form-control" placeholder="Ej: Habitaciones ocupadas"/>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Nombre *</label>
+          <input id="indName" class="form-control" placeholder="Ej: Establecimientos hoteleros"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Clave comparable</label>
+          <input id="indMetricKey" class="form-control" placeholder="Ej: establecimientos" list="metricKeySuggestions"/>
+          <datalist id="metricKeySuggestions"></datalist>
+          <div class="form-help">Usá la misma clave en distintos destinos para habilitar la comparación.</div>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Descripción</label>
         <textarea id="indDesc" class="form-control" rows="2" placeholder="Descripción breve del indicador"></textarea>
       </div>
+
+      <div class="form-section">
+        <h4>Cálculo anual</h4>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Fórmula anual</label>
+            <select id="indAnnualCalcMode" class="form-control" onchange="toggleFormulaFields()"></select>
+            <div class="form-help" id="annualModeDescription">—</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Visualización anual</label>
+            <label class="switch-row">
+              <input id="indAnnualChartVisible" type="checkbox" checked/>
+              Mostrar gráfico anual / comparativo de años
+            </label>
+          </div>
+        </div>
+        <div id="ratioFormulaFields" style="display:none">
+          <div class="form-row-3">
+            <div class="form-group">
+              <label class="form-label">Clave numerador</label>
+              <select id="indFormulaNumerator" class="form-control"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Clave denominador</label>
+              <select id="indFormulaDenominator" class="form-control"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Multiplicador</label>
+              <input id="indFormulaMultiplier" type="number" step="any" class="form-control" value="1"/>
+              <div class="form-help">Ej: 100 para tasas como TOH/TOP.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap">
         <button class="btn btn-secondary" onclick="closeIndicatorModal()">Cancelar</button>
         <button class="btn btn-danger btn-sm" id="deleteIndBtn" onclick="deleteCurrentIndicator()" style="display:none">Eliminar indicador</button>
@@ -243,17 +338,16 @@
     <div class="modal-body">
       <div class="form-group">
         <label class="form-label">📋 Pegado rápido desde Excel</label>
-        <textarea id="pasteArea" class="paste-area" placeholder="Copiá y pegá una fila o columna desde Excel. El sistema separa valores por tab, coma o punto y coma automáticamente." onpaste="handlePaste(event)"></textarea>
-        <div class="paste-hint">El flujo de carga se conserva. Solo le agregamos inteligencia organizativa alrededor.</div>
+        <textarea id="pasteArea" class="paste-area" placeholder="Copiá y pegá una fila o columna directamente desde Excel" onpaste="handlePaste()"></textarea>
+        <div class="paste-hint">No dejo un año por defecto para no inventarte 2026. Acá mandás vos.</div>
       </div>
 
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap">
         <div style="display:flex;align-items:center;gap:8px">
-          <label class="form-label" style="margin:0">Año del pegado:</label>
-          <input id="pasteYear" type="number" class="form-control" style="width:90px" placeholder="2024"/>
+          <label class="form-label" style="margin:0">Año de trabajo:</label>
+          <input id="pasteYear" type="number" class="form-control" style="width:110px" placeholder="Ej: 2024"/>
         </div>
         <button class="btn btn-secondary btn-sm" onclick="applyPaste()">Aplicar pegado ▶</button>
-        <div style="flex:1"></div>
         <button class="btn btn-secondary btn-sm" onclick="addYearRow()">+ Agregar año</button>
         <button class="btn btn-secondary btn-sm" onclick="removeLastYear()" style="color:var(--danger)">− Quitar último</button>
       </div>
@@ -283,6 +377,8 @@
 <script src="../js/charts.js"></script>
 <script src="../js/exports.js"></script>
 <script>
+const UNASSIGNED_DESTINATION_ID = '__unassigned__';
+
 let destinations = [];
 let indicators = [];
 let currentDestination = null;
@@ -290,9 +386,12 @@ let currentIndicator = null;
 let currentDataPoints = [];
 let currentDataByYear = {};
 let currentYearlyStats = {};
+let currentRelatedSeriesMap = {};
+let currentDestinationIndicators = [];
+let currentDataByIndicator = {};
 let gridYears = [];
 let gridData = {};
-const UNASSIGNED_DESTINATION_ID = '__unassigned__';
+let comparisonSelection = { metricKey: '', destinationIds: [] };
 
 window.addEventListener('DOMContentLoaded', async () => {
   const session = await getSession();
@@ -335,12 +434,18 @@ async function loadCoreData({ keepSelection = true } = {}) {
   destinations = await fetchDestinations();
   indicators = await fetchIndicators();
   indicators.forEach(ind => { ind.has_data = Boolean(ind.has_data); });
+  indicators.sort((a, b) => {
+    const destA = (a.destination?.name || 'Sin destino').localeCompare(b.destination?.name || 'Sin destino', 'es');
+    if (destA !== 0) return destA;
+    return a.name.localeCompare(b.name, 'es');
+  });
 
   const renderableDestinations = getRenderableDestinations();
   currentDestination = renderableDestinations.find(d => d.id === previousDestinationId) || renderableDestinations[0] || null;
   currentIndicator = indicators.find(i => i.id === previousIndicatorId) || null;
 
   renderSidebar();
+  renderComparisonControls();
 
   if (currentIndicator) {
     await selectIndicator(currentIndicator.id, { silent: true });
@@ -370,19 +475,17 @@ function getIndicatorsForDestination(destinationId) {
   return indicators.filter(ind => ind.destination_id === destinationId);
 }
 
-
-async function hydrateDestinationDataStatus(destinationId) {
-  const destinationIndicators = getIndicatorsForDestination(destinationId);
-  const ids = destinationIndicators.map(ind => ind.id);
-  if (!ids.length) return;
-  try {
-    const presence = await fetchIndicatorsWithData(ids);
-    indicators.forEach(ind => {
-      if (ids.includes(ind.id)) ind.has_data = presence.has(ind.id);
-    });
-  } catch (e) {
-    // la administración sigue operativa aunque falle esta capa visual
-  }
+function getUniqueMetricOptions() {
+  const byKey = new Map();
+  indicators.forEach(ind => {
+    const key = getMetricKey(ind);
+    if (!key) return;
+    if (!byKey.has(key)) {
+      byKey.set(key, { key, label: ind.name, unit: ind.unit || '', count: 0 });
+    }
+    byKey.get(key).count += 1;
+  });
+  return [...byKey.values()].sort((a, b) => a.label.localeCompare(b.label, 'es'));
 }
 
 function renderSidebar() {
@@ -415,12 +518,26 @@ function renderSidebar() {
         <button class="indicator-item ${currentIndicator?.id === ind.id ? 'active' : ''}" onclick="selectIndicator('${ind.id}')">
           <span class="indicator-main">
             <span class="ind-name">${escapeHtml(ind.name)}</span>
-            <span class="ind-unit">${ind.unit || 'sin unidad'}</span>
+            <span class="ind-unit">${escapeHtml(ind.unit || 'sin unidad')}</span>
           </span>
           ${ind.has_data ? '<span class="badge badge-green">datos</span>' : '<span class="badge badge-orange">vacío</span>'}
         </button>
       `).join('')
     : '<div class="sidebar-hint">Este destino todavía no tiene indicadores.</div>';
+}
+
+async function hydrateDestinationDataStatus(destinationId) {
+  const destinationIndicators = getIndicatorsForDestination(destinationId);
+  const ids = destinationIndicators.map(ind => ind.id);
+  if (!ids.length) return;
+  try {
+    const presence = await fetchIndicatorsWithData(ids);
+    indicators.forEach(ind => {
+      if (ids.includes(ind.id)) ind.has_data = presence.has(ind.id);
+    });
+  } catch (e) {
+    // la administración sigue operativa aunque falle esta capa visual
+  }
 }
 
 async function selectDestination(destinationId) {
@@ -466,22 +583,29 @@ function showCurrentDestinationOverview() {
     empty.style.display = 'block';
   } else {
     empty.style.display = 'none';
-    cards.innerHTML = items.map(ind => `
-      <article class="indicator-overview-card">
-        <div>
-          <h4>${escapeHtml(ind.name)}</h4>
-          <p>${escapeHtml(ind.description || 'Sin descripción cargada.')}</p>
-        </div>
-        <div class="indicator-overview-meta">
-          <span>${escapeHtml(ind.unit || 'sin unidad')}</span>
-          <span>${ind.has_data ? 'Con datos' : 'Sin datos'}</span>
-        </div>
-        <div class="card-actions">
-          <button class="btn btn-primary btn-sm" onclick="selectIndicator('${ind.id}')">Abrir</button>
-          <button class="btn btn-secondary btn-sm" onclick="openEditIndicatorModalById('${ind.id}')">Editar</button>
-        </div>
-      </article>
-    `).join('');
+    cards.innerHTML = items.map(ind => {
+      const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(ind));
+      return `
+        <article class="indicator-overview-card">
+          <div>
+            <h4>${escapeHtml(ind.name)}</h4>
+            <p>${escapeHtml(ind.description || 'Sin descripción cargada.')}</p>
+          </div>
+          <div class="indicator-overview-meta">
+            <span>${escapeHtml(ind.unit || 'sin unidad')}</span>
+            <span>${annualMeta.shortLabel}</span>
+          </div>
+          <div class="indicator-overview-meta">
+            <span>${ind.has_data ? 'Con datos' : 'Sin datos'}</span>
+            <span>${getMetricKey(ind) || 'sin clave comparable'}</span>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-primary btn-sm" onclick="selectIndicator('${ind.id}')">Abrir</button>
+            <button class="btn btn-secondary btn-sm" onclick="openEditIndicatorModalById('${ind.id}')">Editar</button>
+          </div>
+        </article>
+      `;
+    }).join('');
   }
 
   document.getElementById('mainEmpty').style.display = 'none';
@@ -495,13 +619,21 @@ async function selectIndicator(id, { silent = false } = {}) {
 
   const destinationId = currentIndicator.destination_id || UNASSIGNED_DESTINATION_ID;
   currentDestination = getDestinationById(destinationId);
+  currentDestinationIndicators = getIndicatorsForDestination(destinationId);
   renderSidebar();
 
   try {
-    currentDataPoints = await fetchDataPoints(currentIndicator.id);
+    const destinationIds = currentDestinationIndicators.map(ind => ind.id);
+    const allPoints = await fetchDataPointsForIndicators(destinationIds);
+    currentDataByIndicator = buildDataByIndicator(allPoints);
+    currentDataPoints = currentDataByIndicator[currentIndicator.id] || [];
     currentIndicator.has_data = currentDataPoints.length > 0;
     currentDataByYear = buildDataByYear(currentDataPoints);
-    currentYearlyStats = calcYearlyStats(currentDataByYear);
+    currentRelatedSeriesMap = buildRelatedSeriesMapForDestination(currentIndicator, currentDestinationIndicators, currentDataByIndicator);
+    currentYearlyStats = calcYearlyStats(currentDataByYear, {
+      indicator: currentIndicator,
+      relatedSeriesMap: currentRelatedSeriesMap,
+    });
     renderDashboard();
     document.getElementById('mainEmpty').style.display = 'none';
     document.getElementById('destinationOverview').style.display = 'none';
@@ -512,21 +644,27 @@ async function selectIndicator(id, { silent = false } = {}) {
 }
 
 function renderDashboard() {
-  const years = Object.keys(currentDataByYear).map(Number).sort();
+  const years = Object.keys(currentDataByYear).map(Number).sort((a, b) => a - b);
+  const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(currentIndicator));
+  const allVals = currentDataPoints.map(d => Number(d.value)).filter(v => !isNaN(v));
+  const gs = calcStats(allVals);
+  const lastYear = years[years.length - 1];
+  const lastStats = lastYear ? currentYearlyStats[lastYear] : null;
+
   document.getElementById('viewTitle').textContent = currentIndicator.name;
   document.getElementById('viewDesc').textContent = currentIndicator.description || '';
   document.getElementById('viewDestinationBadge').textContent = currentDestination?.name || 'Sin destino';
   document.getElementById('statsUnit').textContent = currentIndicator.unit || 'unidades';
   document.getElementById('yearsCount').textContent = years.length + ' año' + (years.length !== 1 ? 's' : '');
-
-  const allVals = currentDataPoints.map(d => Number(d.value)).filter(v => !isNaN(v));
-  const gs = calcStats(allVals);
-  const lastYear = years[years.length - 1];
-  const lastStats = currentYearlyStats[lastYear];
+  document.getElementById('statsAnnualHeader').textContent = annualMeta.shortLabel;
+  document.getElementById('annualChartTitle').textContent = annualMeta.shortLabel;
+  document.getElementById('annualChartNote').textContent = currentIndicator.annual_chart_visible === false ? 'Oculto por configuración' : annualMeta.description;
+  document.getElementById('annualCalcBadge').textContent = annualMeta.label;
+  document.getElementById('annualCalcHelp').textContent = annualMeta.description;
 
   const kpis = [
     { label: 'Promedio mensual', value: formatNumber(gs?.mean), sub: 'Histórico global', accent: 'var(--accent)' },
-    { label: `Total ${lastYear || '—'}`, value: formatNumber(lastStats?.sum), change: lastStats?.yoySum, accent: '#10B981' },
+    { label: `${annualMeta.shortLabel} ${lastYear || '—'}`, value: formatNumber(lastStats?.annualValue), change: lastStats?.yoyAnnual, accent: '#10B981' },
     { label: 'Máximo mensual', value: formatNumber(gs?.max), sub: 'Histórico', accent: '#A855F7' },
     { label: 'Mínimo mensual', value: formatNumber(gs?.min), sub: 'Histórico', accent: '#F97316' },
     { label: 'Mediana mensual', value: formatNumber(gs?.median), sub: 'Histórico global', accent: '#06B6D4' },
@@ -542,18 +680,23 @@ function renderDashboard() {
   `).join('');
 
   destroyCharts();
-  if (years.length) {
-    renderLineChart('lineChart', currentDataByYear, currentIndicator);
+  renderLineChart('lineChart', currentDataByYear, currentIndicator);
+
+  const annualChartCard = document.getElementById('annualChartCard');
+  if (currentIndicator.annual_chart_visible === false || getIndicatorCalcMode(currentIndicator) === 'none') {
+    annualChartCard.style.display = 'none';
+  } else {
+    annualChartCard.style.display = 'block';
     renderBarChart('barChart', currentYearlyStats, currentIndicator);
   }
 
   const tbody = document.getElementById('statsBody');
   tbody.innerHTML = years.map(yr => {
     const s = currentYearlyStats[yr];
-    const yoy = s?.yoySum;
+    const yoy = s?.yoyAnnual;
     return `<tr>
       <td><strong>${yr}</strong></td>
-      <td>${formatNumber(s?.sum)}</td>
+      <td>${formatNumber(s?.annualValue)}</td>
       <td>${formatNumber(s?.mean)}</td>
       <td>${formatNumber(s?.median)}</td>
       <td>${formatNumber(s?.min)}</td>
@@ -589,6 +732,46 @@ function populateDestinationSelect(selectedId = '') {
   const options = destinations.map(dest => `<option value="${dest.id}">${escapeHtml(dest.name)}</option>`).join('');
   select.innerHTML = `<option value="">Seleccionar destino</option>${options}`;
   select.value = selectedId || currentDestination?.id || '';
+}
+
+function populateMetricControls(currentValue = '') {
+  const options = getUniqueMetricOptions();
+  document.getElementById('metricKeySuggestions').innerHTML = options.map(opt => `<option value="${escapeHtml(opt.key)}">`).join('');
+  if (!currentValue) {
+    const nameValue = document.getElementById('indName').value.trim();
+    document.getElementById('indMetricKey').value = nameValue ? slugify(nameValue) : '';
+  }
+
+  const buildSelectOptions = (selectedValue) => {
+    const base = ['<option value="">Seleccionar</option>'];
+    const seen = new Set();
+    options.forEach(opt => {
+      if (seen.has(opt.key)) return;
+      seen.add(opt.key);
+      base.push(`<option value="${escapeHtml(opt.key)}" ${selectedValue === opt.key ? 'selected' : ''}>${escapeHtml(opt.label)} · ${escapeHtml(opt.key)}</option>`);
+    });
+    if (selectedValue && !seen.has(selectedValue)) {
+      base.push(`<option value="${escapeHtml(selectedValue)}" selected>${escapeHtml(selectedValue)}</option>`);
+    }
+    return base.join('');
+  };
+
+  const numerator = document.getElementById('indFormulaNumerator').dataset.current || '';
+  const denominator = document.getElementById('indFormulaDenominator').dataset.current || '';
+  document.getElementById('indFormulaNumerator').innerHTML = buildSelectOptions(numerator);
+  document.getElementById('indFormulaDenominator').innerHTML = buildSelectOptions(denominator);
+}
+
+function populateAnnualModeSelect(selectedMode = 'sum') {
+  const select = document.getElementById('indAnnualCalcMode');
+  select.innerHTML = Object.entries(ANNUAL_CALC_OPTIONS).map(([value, meta]) => `<option value="${value}" ${selectedMode === value ? 'selected' : ''}>${meta.label}</option>`).join('');
+  document.getElementById('annualModeDescription').textContent = getAnnualCalcMeta(selectedMode).description;
+}
+
+function toggleFormulaFields() {
+  const mode = document.getElementById('indAnnualCalcMode').value;
+  document.getElementById('ratioFormulaFields').style.display = mode === 'ratio_of_sums' ? 'block' : 'none';
+  document.getElementById('annualModeDescription').textContent = getAnnualCalcMeta(mode).description;
 }
 
 function openDestinationModal() {
@@ -656,25 +839,45 @@ async function deleteCurrentDestination() {
   }
 }
 
-function openNewIndicatorModal() {
-  populateDestinationSelect(currentDestination?.id && currentDestination.id !== UNASSIGNED_DESTINATION_ID ? currentDestination.id : '');
-  document.getElementById('indicatorModalTitle').textContent = 'Nuevo indicador';
+function resetIndicatorForm() {
   document.getElementById('indicatorId').value = '';
   document.getElementById('indName').value = '';
   document.getElementById('indUnit').value = '';
   document.getElementById('indDesc').value = '';
+  document.getElementById('indMetricKey').value = '';
+  document.getElementById('indAnnualChartVisible').checked = true;
+  document.getElementById('indFormulaMultiplier').value = '1';
+  document.getElementById('indFormulaNumerator').dataset.current = '';
+  document.getElementById('indFormulaDenominator').dataset.current = '';
+}
+
+function openNewIndicatorModal() {
+  resetIndicatorForm();
+  populateDestinationSelect(currentDestination?.id && currentDestination.id !== UNASSIGNED_DESTINATION_ID ? currentDestination.id : '');
+  populateAnnualModeSelect('sum');
+  populateMetricControls();
+  toggleFormulaFields();
+  document.getElementById('indicatorModalTitle').textContent = 'Nuevo indicador';
   document.getElementById('deleteIndBtn').style.display = 'none';
   document.getElementById('indicatorModal').classList.add('open');
 }
 
 function openEditIndicatorModal() {
   if (!currentIndicator) return;
-  populateDestinationSelect(currentIndicator.destination_id || '');
   document.getElementById('indicatorModalTitle').textContent = 'Editar indicador';
   document.getElementById('indicatorId').value = currentIndicator.id;
   document.getElementById('indName').value = currentIndicator.name;
   document.getElementById('indUnit').value = currentIndicator.unit || '';
   document.getElementById('indDesc').value = currentIndicator.description || '';
+  document.getElementById('indMetricKey').value = getMetricKey(currentIndicator);
+  document.getElementById('indAnnualChartVisible').checked = currentIndicator.annual_chart_visible !== false;
+  document.getElementById('indFormulaMultiplier').value = currentIndicator.formula_multiplier ?? 1;
+  document.getElementById('indFormulaNumerator').dataset.current = currentIndicator.formula_numerator_key || '';
+  document.getElementById('indFormulaDenominator').dataset.current = currentIndicator.formula_denominator_key || '';
+  populateDestinationSelect(currentIndicator.destination_id || '');
+  populateAnnualModeSelect(currentIndicator.annual_calc_mode || 'sum');
+  populateMetricControls(getMetricKey(currentIndicator));
+  toggleFormulaFields();
   document.getElementById('deleteIndBtn').style.display = 'inline-flex';
   document.getElementById('indicatorModal').classList.add('open');
 }
@@ -688,29 +891,50 @@ function closeIndicatorModal() {
   document.getElementById('indicatorModal').classList.remove('open');
 }
 
+document.addEventListener('input', (event) => {
+  if (event.target?.id === 'indName') {
+    const metricInput = document.getElementById('indMetricKey');
+    if (!metricInput.value.trim()) {
+      metricInput.value = slugify(event.target.value);
+    }
+  }
+});
+
 async function saveIndicator() {
   const id = document.getElementById('indicatorId').value;
-  const destinationId = document.getElementById('indDestination').value;
-  const name = document.getElementById('indName').value.trim();
-  const unit = document.getElementById('indUnit').value.trim();
-  const desc = document.getElementById('indDesc').value.trim();
+  const payload = {
+    destination_id: document.getElementById('indDestination').value,
+    name: document.getElementById('indName').value.trim(),
+    unit: document.getElementById('indUnit').value.trim(),
+    description: document.getElementById('indDesc').value.trim(),
+    metric_key: document.getElementById('indMetricKey').value.trim() || slugify(document.getElementById('indName').value.trim()),
+    annual_calc_mode: document.getElementById('indAnnualCalcMode').value,
+    annual_chart_visible: document.getElementById('indAnnualChartVisible').checked,
+    formula_numerator_key: document.getElementById('indFormulaNumerator').value,
+    formula_denominator_key: document.getElementById('indFormulaDenominator').value,
+    formula_multiplier: document.getElementById('indFormulaMultiplier').value,
+  };
 
-  if (!destinationId) { toast('Elegí un destino para el indicador.', 'error'); return; }
-  if (!name) { toast('El nombre es obligatorio', 'error'); return; }
+  if (!payload.destination_id) { toast('Elegí un destino para el indicador.', 'error'); return; }
+  if (!payload.name) { toast('El nombre es obligatorio.', 'error'); return; }
+  if (payload.annual_calc_mode === 'ratio_of_sums' && (!payload.formula_numerator_key || !payload.formula_denominator_key)) {
+    toast('Para recalcular por fórmula anual necesitás numerador y denominador.', 'error');
+    return;
+  }
 
   try {
     if (id) {
-      await updateIndicator(id, { name, unit, description: desc, destination_id: destinationId });
+      await updateIndicator(id, payload);
       toast('Indicador actualizado', 'success');
     } else {
-      await createIndicator(name, desc, unit, destinationId);
+      await createIndicator(payload);
       toast('Indicador creado', 'success');
     }
     closeIndicatorModal();
     await loadCoreData({ keepSelection: false });
-    await selectDestination(destinationId);
+    await selectDestination(payload.destination_id);
   } catch (e) {
-    toast('Error: ' + e.message, 'error');
+    toast('Error guardando indicador: ' + e.message, 'error');
   }
 }
 
@@ -726,20 +950,21 @@ async function deleteCurrentIndicator() {
     await selectDestination(destinationId);
     toast('Indicador eliminado', 'success');
   } catch (e) {
-    toast('Error: ' + e.message, 'error');
+    toast('Error eliminando indicador: ' + e.message, 'error');
   }
 }
 
 function openDataModal() {
   if (!currentIndicator) return;
-  const years = Object.keys(currentDataByYear).map(Number).sort();
-  gridYears = years.length ? [...years] : [new Date().getFullYear()];
+  const years = Object.keys(currentDataByYear).map(Number).sort((a, b) => a - b);
+  gridYears = [...years];
   gridData = {};
   gridYears.forEach(yr => {
-    gridData[yr] = currentDataByYear[yr] ? [...currentDataByYear[yr]] : new Array(12).fill('');
+    gridData[yr] = currentDataByYear[yr] ? [...currentDataByYear[yr]] : new Array(12).fill(null);
   });
   document.getElementById('pasteArea').value = '';
-  document.getElementById('pasteYear').value = gridYears[gridYears.length - 1];
+  document.getElementById('pasteArea').style.borderColor = '';
+  document.getElementById('pasteYear').value = years.length ? years[years.length - 1] : '';
   renderGrid();
   document.getElementById('dataModal').classList.add('open');
 }
@@ -750,6 +975,11 @@ function closeDataModal() {
 
 function renderGrid() {
   const grid = document.getElementById('monthGrid');
+  if (!gridYears.length) {
+    grid.innerHTML = '<div class="sidebar-hint" style="grid-column:1/-1;padding:16px 0">No hay años cargados todavía. Escribí un año y agregalo.</div>';
+    return;
+  }
+
   let html = `<div class="month-grid-header"><div></div>${MONTHS.map(m => `<div>${m.slice(0,3)}</div>`).join('')}</div>`;
   gridYears.forEach(yr => {
     html += `<div class="month-grid-row">
@@ -767,27 +997,34 @@ function renderGrid() {
 function cellNav(event, yr, mi) {
   const yi = gridYears.indexOf(yr);
   if (event.key === 'ArrowRight' && mi < 11) {
-    document.getElementById(`cell_${yr}_${mi+1}`)?.focus();
+    document.getElementById(`cell_${yr}_${mi + 1}`)?.focus();
   } else if (event.key === 'ArrowLeft' && mi > 0) {
-    document.getElementById(`cell_${yr}_${mi-1}`)?.focus();
+    document.getElementById(`cell_${yr}_${mi - 1}`)?.focus();
   } else if (event.key === 'ArrowDown' && yi < gridYears.length - 1) {
-    document.getElementById(`cell_${gridYears[yi+1]}_${mi}`)?.focus();
+    document.getElementById(`cell_${gridYears[yi + 1]}_${mi}`)?.focus();
   } else if (event.key === 'ArrowUp' && yi > 0) {
-    document.getElementById(`cell_${gridYears[yi-1]}_${mi}`)?.focus();
+    document.getElementById(`cell_${gridYears[yi - 1]}_${mi}`)?.focus();
   }
 }
 
 function addYearRow() {
-  const maxYr = gridYears.length ? Math.max(...gridYears) : new Date().getFullYear() - 1;
-  const newYr = maxYr + 1;
-  gridYears.push(newYr);
-  gridData[newYr] = new Array(12).fill('');
+  const year = parseInt(document.getElementById('pasteYear').value, 10);
+  if (!year || isNaN(year)) {
+    toast('Escribí el año que querés agregar.', 'error');
+    return;
+  }
+  if (gridYears.includes(year)) {
+    toast('Ese año ya está cargado en la grilla.', 'error');
+    return;
+  }
+  gridYears.push(year);
+  gridYears.sort((a, b) => a - b);
+  gridData[year] = new Array(12).fill(null);
   renderGrid();
-  document.getElementById('pasteYear').value = newYr;
 }
 
 function removeLastYear() {
-  if (gridYears.length <= 1) return;
+  if (!gridYears.length) return;
   const removed = gridYears.pop();
   delete gridData[removed];
   renderGrid();
@@ -805,7 +1042,7 @@ function parsePasteValues(raw) {
   window._parsedPaste = values;
   if (values.length) {
     document.getElementById('pasteArea').style.borderColor = 'var(--success)';
-    toast(`${values.length} valores detectados. Elegí el año y presioná "Aplicar pegado".`, 'success');
+    toast(`${values.length} valores detectados. Elegí el año y aplicalos.`, 'success');
   }
 }
 
@@ -813,14 +1050,14 @@ function applyPaste() {
   const raw = document.getElementById('pasteArea').value;
   parsePasteValues(raw);
   const year = parseInt(document.getElementById('pasteYear').value, 10);
-  if (!year || isNaN(year)) { toast('Ingresá un año válido', 'error'); return; }
+  if (!year || isNaN(year)) { toast('Ingresá un año válido.', 'error'); return; }
   const values = window._parsedPaste || [];
   if (!values.length) { toast('No hay valores para aplicar. Pegá primero los datos.', 'error'); return; }
 
   if (!gridYears.includes(year)) {
     gridYears.push(year);
     gridYears.sort((a, b) => a - b);
-    gridData[year] = new Array(12).fill('');
+    gridData[year] = new Array(12).fill(null);
   }
 
   values.slice(0, 12).forEach((v, i) => {
@@ -832,30 +1069,179 @@ function applyPaste() {
   document.getElementById('pasteArea').value = '';
   document.getElementById('pasteArea').style.borderColor = '';
   window._parsedPaste = [];
-  toast(`Datos de ${year} aplicados. Revisalos en la grilla y guardá.`, 'success');
+  toast(`Datos de ${year} aplicados. Revisalos y guardá.`, 'success');
 }
 
 async function saveData() {
   if (!currentIndicator) return;
+
+  const existingYears = Object.keys(currentDataByYear).map(Number);
+  const allYears = [...new Set([...existingYears, ...gridYears])];
   const points = [];
+
   gridYears.forEach(yr => {
     for (let mi = 0; mi < 12; mi++) {
       const cell = document.getElementById(`cell_${yr}_${mi}`);
       const raw = cell ? cell.value : (gridData[yr]?.[mi] ?? '');
       const val = raw === '' || raw === null ? null : parseFloat(raw);
-      points.push({ indicator_id: currentIndicator.id, year: yr, month: mi + 1, value: isNaN(val) ? null : val });
+      if (val !== null && !isNaN(val)) {
+        points.push({ indicator_id: currentIndicator.id, year: yr, month: mi + 1, value: val });
+      }
     }
   });
 
   try {
-    await upsertDataPoints(points);
-    currentIndicator.has_data = true;
+    if (allYears.length) {
+      await deleteDataPointsForYears(currentIndicator.id, allYears);
+    }
+    if (points.length) {
+      await upsertDataPoints(points);
+    }
+    currentIndicator.has_data = points.length > 0;
     closeDataModal();
     await selectIndicator(currentIndicator.id, { silent: true });
     renderSidebar();
     toast('Datos guardados correctamente ✓', 'success');
   } catch (e) {
     toast('Error guardando: ' + e.message, 'error');
+  }
+}
+
+function renderComparisonControls() {
+  const metricSelect = document.getElementById('compareMetricKey');
+  const options = getUniqueMetricOptions();
+  if (!options.length) {
+    metricSelect.innerHTML = '<option value="">No hay indicadores comparables</option>';
+    document.getElementById('compareDestinationList').innerHTML = '';
+    return;
+  }
+
+  const selectedMetric = options.find(opt => opt.key === comparisonSelection.metricKey)?.key || comparisonSelection.metricKey || options[0].key;
+  comparisonSelection.metricKey = selectedMetric;
+  metricSelect.innerHTML = options.map(opt => `<option value="${opt.key}" ${selectedMetric === opt.key ? 'selected' : ''}>${escapeHtml(opt.label)} · ${escapeHtml(opt.key)}</option>`).join('');
+  renderComparisonDestinationChoices();
+}
+
+function renderComparisonDestinationChoices() {
+  const metricKey = comparisonSelection.metricKey;
+  const relevantIndicators = indicators.filter(ind => getMetricKey(ind) === metricKey && ind.destination_id);
+  const destinationIds = [...new Set(relevantIndicators.map(ind => ind.destination_id))];
+  const availableDestinations = destinations.filter(dest => destinationIds.includes(dest.id));
+  const defaultSelection = comparisonSelection.destinationIds.filter(id => destinationIds.includes(id));
+  comparisonSelection.destinationIds = defaultSelection.length ? defaultSelection : availableDestinations.slice(0, 2).map(dest => dest.id);
+
+  const container = document.getElementById('compareDestinationList');
+  if (!availableDestinations.length) {
+    container.innerHTML = '<span class="help-text">No hay destinos comparables para esa clave.</span>';
+    return;
+  }
+
+  container.innerHTML = availableDestinations.map(dest => {
+    const checked = comparisonSelection.destinationIds.includes(dest.id);
+    return `
+      <label class="chip-checkbox ${checked ? 'active' : ''}">
+        <input type="checkbox" value="${dest.id}" ${checked ? 'checked' : ''} onchange="toggleComparisonDestination('${dest.id}', this.checked)"/>
+        ${escapeHtml(dest.name)}
+      </label>
+    `;
+  }).join('');
+}
+
+function handleComparisonMetricChange() {
+  comparisonSelection.metricKey = document.getElementById('compareMetricKey').value;
+  comparisonSelection.destinationIds = [];
+  renderComparisonDestinationChoices();
+  clearComparisonResults();
+}
+
+function toggleComparisonDestination(destinationId, checked) {
+  const next = new Set(comparisonSelection.destinationIds);
+  if (checked) next.add(destinationId);
+  else next.delete(destinationId);
+  comparisonSelection.destinationIds = [...next];
+  renderComparisonDestinationChoices();
+}
+
+function clearComparisonResults() {
+  destroyComparisonChart();
+  document.getElementById('compareEmpty').style.display = 'block';
+  document.getElementById('compareResults').style.display = 'none';
+  document.getElementById('compareSummaryBadge').textContent = 'Sin comparación';
+}
+
+async function runComparison() {
+  const metricKey = comparisonSelection.metricKey;
+  const destinationIds = comparisonSelection.destinationIds;
+  if (!metricKey) {
+    toast('Elegí un indicador comparable.', 'error');
+    return;
+  }
+  if (destinationIds.length < 2) {
+    toast('Seleccioná al menos dos destinos para comparar.', 'error');
+    return;
+  }
+
+  const selectedIndicators = destinationIds
+    .map(destId => indicators.find(ind => ind.destination_id === destId && getMetricKey(ind) === metricKey))
+    .filter(Boolean);
+  if (selectedIndicators.length < 2) {
+    toast('No encontré suficientes indicadores comparables.', 'error');
+    return;
+  }
+
+  try {
+    const destinationIndicatorIds = [...new Set(destinationIds.flatMap(destId => getIndicatorsForDestination(destId).map(ind => ind.id)))];
+    const allPoints = await fetchDataPointsForIndicators(destinationIndicatorIds);
+    const dataByIndicator = buildDataByIndicator(allPoints);
+    const yearsSet = new Set();
+    const series = [];
+
+    selectedIndicators.forEach(indicator => {
+      const destinationIndicators = getIndicatorsForDestination(indicator.destination_id);
+      const relatedSeriesMap = buildRelatedSeriesMapForDestination(indicator, destinationIndicators, dataByIndicator);
+      const dataByYear = buildDataByYear(dataByIndicator[indicator.id] || []);
+      const yearlyStats = calcYearlyStats(dataByYear, { indicator, relatedSeriesMap });
+      const annualSeries = buildAnnualSeries(yearlyStats);
+      annualSeries.years.forEach(year => yearsSet.add(year));
+      series.push({
+        indicator,
+        destinationName: indicator.destination?.name || 'Sin destino',
+        yearlyStats,
+        annualSeries,
+      });
+    });
+
+    const years = [...yearsSet].sort((a, b) => a - b);
+    const chartSeries = series.map(item => ({
+      label: item.destinationName,
+      values: years.map(year => item.yearlyStats?.[year]?.annualValue ?? null),
+    }));
+
+    renderComparisonChart('comparisonChart', {
+      years,
+      series: chartSeries,
+      unit: selectedIndicators[0]?.unit || '',
+    });
+
+    const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(selectedIndicators[0]));
+    document.getElementById('compareChartTitle').textContent = `${selectedIndicators[0].name} · comparación entre destinos`;
+    document.getElementById('compareChartNote').textContent = annualMeta.shortLabel;
+    document.getElementById('compareSummaryBadge').textContent = `${destinationIds.length} destinos`;
+
+    const table = document.getElementById('comparisonTable');
+    const header = `<thead><tr><th>Destino</th>${years.map(year => `<th>${year}</th>`).join('')}</tr></thead>`;
+    const rows = series.map(item => `
+      <tr>
+        <td>${escapeHtml(item.destinationName)}</td>
+        ${years.map(year => `<td>${formatNumber(item.yearlyStats?.[year]?.annualValue)}</td>`).join('')}
+      </tr>
+    `).join('');
+    table.innerHTML = header + `<tbody>${rows}</tbody>`;
+
+    document.getElementById('compareEmpty').style.display = 'none';
+    document.getElementById('compareResults').style.display = 'block';
+  } catch (e) {
+    toast('Error armando la comparación: ' + e.message, 'error');
   }
 }
 
