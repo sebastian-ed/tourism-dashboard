@@ -1117,8 +1117,40 @@ function handlePaste() {
   }, 50);
 }
 
+function splitCompactNumericToken(token) {
+  const parts = token.split(/\s{2,}/).map(v => v.trim()).filter(Boolean);
+  return parts.length > 1 ? parts : [token.trim()];
+}
+
+function extractPastedValues(raw) {
+  const normalized = String(raw || '').replace(/\u00A0/g, ' ').trim();
+  if (!normalized) return [];
+
+  const hasStructuredSeparators = /[\t;\r\n]/.test(normalized);
+  if (hasStructuredSeparators) {
+    return normalized
+      .split(/[\t;\r\n]+/)
+      .flatMap(splitCompactNumericToken)
+      .map(v => v.trim())
+      .filter(Boolean);
+  }
+
+  const commaSeparated = normalized.split(',').map(v => v.trim()).filter(Boolean);
+  const looksLikeSimpleCsv = commaSeparated.length > 1 && commaSeparated.every(v => /^-?\d+(?:\.\d+)?$/.test(v));
+  if (looksLikeSimpleCsv) return commaSeparated;
+
+  const spaced = normalized
+    .split(/\s{2,}|\r?\n/)
+    .map(v => v.trim())
+    .filter(Boolean);
+  if (spaced.length > 1) return spaced;
+
+  const numericMatches = normalized.match(/-?\d+(?:\.\d{3})*(?:,\d+)?|-?\d+(?:\.\d+)?/g);
+  return numericMatches ? numericMatches.map(v => v.trim()).filter(Boolean) : [];
+}
+
 function parsePasteValues(raw) {
-  const values = raw.split(/[\t,;]+/).map(v => v.trim()).filter(v => v !== '');
+  const values = extractPastedValues(raw);
   window._parsedPaste = values;
   if (values.length) {
     document.getElementById('pasteArea').style.borderColor = 'var(--success)';
@@ -1141,7 +1173,8 @@ function applyPaste() {
   }
 
   values.slice(0, 12).forEach((v, i) => {
-    const num = parseFloat(v.replace(/\./g, '').replace(',', '.'));
+    const cleaned = String(v).trim();
+    const num = parseFloat(cleaned.replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.'));
     gridData[year][i] = isNaN(num) ? null : num;
   });
 
