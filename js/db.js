@@ -82,6 +82,7 @@ function normalizeIndicatorRow(item) {
     formula_numerator_key: item.formula_numerator_key || '',
     formula_denominator_key: item.formula_denominator_key || '',
     formula_multiplier: item.formula_multiplier === null || item.formula_multiplier === undefined ? 1 : Number(item.formula_multiplier),
+    group_title: item.group_title || '',
     destination: item.destinations || null,
   };
 }
@@ -109,6 +110,7 @@ async function createIndicator(payload) {
       formula_numerator_key: payload.formula_numerator_key || null,
       formula_denominator_key: payload.formula_denominator_key || null,
       formula_multiplier: payload.formula_multiplier === '' || payload.formula_multiplier === null || payload.formula_multiplier === undefined ? 1 : Number(payload.formula_multiplier),
+      group_title: payload.group_title || '',
     })
     .select('*, destinations(id, name, slug)')
     .single();
@@ -132,6 +134,9 @@ async function updateIndicator(id, fields) {
     payload.formula_multiplier = payload.formula_multiplier === '' || payload.formula_multiplier === null || payload.formula_multiplier === undefined
       ? 1
       : Number(payload.formula_multiplier);
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'group_title')) {
+    payload.group_title = (payload.group_title || '').trim();
   }
   const { error } = await getSupabase()
     .from('indicators')

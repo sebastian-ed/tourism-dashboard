@@ -40,7 +40,8 @@ ALTER TABLE indicators
   ADD COLUMN IF NOT EXISTS metric_key TEXT,
   ADD COLUMN IF NOT EXISTS formula_numerator_key TEXT,
   ADD COLUMN IF NOT EXISTS formula_denominator_key TEXT,
-  ADD COLUMN IF NOT EXISTS formula_multiplier NUMERIC DEFAULT 1;
+  ADD COLUMN IF NOT EXISTS formula_multiplier NUMERIC DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS group_title TEXT DEFAULT '';
 
 UPDATE indicators
 SET destination_id = (SELECT id FROM destinations WHERE slug = 'general' LIMIT 1)
@@ -61,6 +62,10 @@ WHERE annual_chart_visible IS NULL;
 UPDATE indicators
 SET formula_multiplier = 1
 WHERE formula_multiplier IS NULL;
+
+UPDATE indicators
+SET group_title = ''
+WHERE group_title IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_indicators_destination ON indicators(destination_id);
 CREATE INDEX IF NOT EXISTS idx_indicators_name ON indicators(name);

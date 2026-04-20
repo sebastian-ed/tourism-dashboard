@@ -363,6 +363,172 @@ input, select, textarea { font-family: inherit; }
   gap: 16px;
   padding: 20px 24px 24px;
 }
+.destination-groups {
+  display: grid;
+  gap: 18px;
+  padding: 20px 24px 24px;
+}
+.grouped-indicator-section {
+  display: grid;
+  gap: 12px;
+}
+.grouped-indicator-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  background: rgba(15,23,42,.4);
+}
+.grouped-indicator-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.grouped-indicator-section-title h4 {
+  font-size: 15px;
+  font-weight: 700;
+}
+.grouped-indicator-section-title::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(59,130,246,.12);
+}
+.grouped-indicator-section-body {
+  position: relative;
+  padding-left: 18px;
+}
+.grouped-indicator-section-body::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 5px;
+  width: 1px;
+  background: linear-gradient(180deg, rgba(59,130,246,.28), rgba(59,130,246,.04));
+}
+.grouped-indicator-section-body .destination-cards {
+  padding: 0;
+}
+.status-inline {
+  font-weight: 700;
+}
+.status-inline.success { color: var(--success); }
+.status-inline.warning { color: var(--accent-2); }
+.indicator-tree-group {
+  margin-bottom: 10px;
+}
+.indicator-tree-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px 8px 14px;
+  color: var(--text-subtle);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  position: relative;
+}
+.indicator-tree-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 999px;
+  background: rgba(59,130,246,.35);
+}
+.tree-count {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.indicator-tree-items {
+  position: relative;
+  margin-left: 10px;
+  padding-left: 14px;
+}
+.indicator-tree-items::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0;
+  bottom: 4px;
+  width: 1px;
+  background: rgba(59,130,246,.18);
+}
+.indicator-tree-items .indicator-item {
+  position: relative;
+}
+.indicator-tree-items .indicator-item::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  width: 12px;
+  height: 1px;
+  background: rgba(59,130,246,.18);
+}
+.year-delete-panel {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-light);
+  display: grid;
+  gap: 10px;
+}
+.year-delete-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.year-delete-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.year-delete-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  background: rgba(15,23,42,.45);
+  color: var(--text-subtle);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+.year-delete-chip.active {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(239,68,68,.08);
+}
+.year-delete-chip-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.06);
+  font-size: 11px;
+  font-weight: 700;
+}
+.year-delete-chip.active .year-delete-chip-marker {
+  background: rgba(239,68,68,.14);
+}
 .indicator-overview-card {
   background: rgba(15,23,42,.6);
   border: 1px solid var(--border-light);
@@ -756,6 +922,7 @@ input, select, textarea { font-family: inherit; }
   .form-row-3 { grid-template-columns: 1fr; }
   .main-content { padding: 20px 16px 28px; }
   .topbar { flex-direction: column; align-items: flex-start; }
+  .destination-groups { padding: 16px; }
   .destination-cards { grid-template-columns: 1fr; padding: 16px; }
   .overview-hero { padding: 20px 16px; }
   .overview-summary { padding: 16px 16px 0; }

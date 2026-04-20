@@ -135,7 +135,7 @@
           <button class="btn btn-primary btn-sm" onclick="openNewIndicatorModal()">+ Nuevo indicador</button>
         </div>
       </div>
-      <div class="destination-cards" id="destinationCards"></div>
+      <div class="destination-groups" id="destinationCards"></div>
       <div class="empty-indicators" id="destinationCardsEmpty" style="display:none">Este destino no tiene indicadores. Creá el primero y dejá de administrarlo por intuición.</div>
     </div>
 
@@ -292,9 +292,17 @@
           <div class="form-help">Usá la misma clave en distintos destinos para habilitar la comparación.</div>
         </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Descripción</label>
-        <textarea id="indDesc" class="form-control" rows="2" placeholder="Descripción breve del indicador"></textarea>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Título agrupador</label>
+          <input id="indGroupTitle" class="form-control" placeholder="Ej: Establecimientos" list="groupTitleSuggestions"/>
+          <datalist id="groupTitleSuggestions"></datalist>
+          <div class="form-help">Define la rama o bloque visual donde querés mostrar este indicador dentro del destino.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descripción</label>
+          <textarea id="indDesc" class="form-control" rows="2" placeholder="Descripción breve del indicador"></textarea>
+        </div>
       </div>
 
       <div class="form-section">
@@ -368,6 +376,17 @@
         <div class="month-grid" id="monthGrid"></div>
       </div>
 
+      <div class="year-delete-panel">
+        <div class="year-delete-actions">
+          <div>
+            <label class="form-label" style="margin-bottom:4px">Eliminar años seleccionados</label>
+            <div class="form-help">Marcá uno o varios años y eliminá solo esos. Después guardás y listo.</div>
+          </div>
+          <button class="btn btn-danger btn-sm" type="button" onclick="removeSelectedYears()">Eliminar seleccionados</button>
+        </div>
+        <div id="yearDeleteList" class="year-delete-list"></div>
+      </div>
+
       <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap">
         <button class="btn btn-secondary" onclick="closeDataModal()">Cancelar</button>
         <button class="btn btn-primary" onclick="saveData()">💾 Guardar datos</button>
@@ -403,6 +422,7 @@ let currentDestinationIndicators = [];
 let currentDataByIndicator = {};
 let gridYears = [];
 let gridData = {};
+let selectedGridYears = [];
 let comparisonSelection = { metricKey: '', destinationIds: [] };
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -480,6 +500,94 @@ function getDestinationById(destinationId) {
   return getRenderableDestinations().find(dest => dest.id === destinationId) || null;
 }
 
+function getIndicatorGroupTitle(indicator) {
+  return (indicator?.group_title || '').trim() || 'Sin agrupar';
+}
+
+function groupIndicatorsByTitle(items) {
+  const groups = new Map();
+  items.forEach(indicator => {
+    const title = getIndicatorGroupTitle(indicator);
+    if (!groups.has(title)) groups.set(title, []);
+    groups.get(title).push(indicator);
+  });
+
+  return [...groups.entries()]
+    .map(([title, indicators]) => ({
+      title,
+      indicators: [...indicators].sort((a, b) => a.name.localeCompare(b.name, 'es'))
+    }))
+    .sort((a, b) => {
+      if (a.title === 'Sin agrupar' && b.title !== 'Sin agrupar') return 1;
+      if (b.title === 'Sin agrupar' && a.title !== 'Sin agrupar') return -1;
+      return a.title.localeCompare(b.title, 'es');
+    });
+}
+
+function renderGroupedSidebarIndicators(items) {
+  const groups = groupIndicatorsByTitle(items);
+  return groups.map(group => `
+    <div class="indicator-tree-group">
+      <div class="indicator-tree-title">
+        <span>${escapeHtml(group.title)}</span>
+        <span class="tree-count">${group.indicators.length}</span>
+      </div>
+      <div class="indicator-tree-items">
+        ${group.indicators.map(ind => `
+          <button class="indicator-item ${currentIndicator?.id === ind.id ? 'active' : ''}" onclick="selectIndicator('${ind.id}')">
+            <span class="indicator-main">
+              <span class="ind-name">${escapeHtml(ind.name)}</span>
+              <span class="ind-unit">${escapeHtml(ind.unit || 'sin unidad')}</span>
+            </span>
+            ${ind.has_data ? '<span class="badge badge-green">datos</span>' : '<span class="badge badge-orange">vacío</span>'}
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderGroupedOverviewCards(items) {
+  const groups = groupIndicatorsByTitle(items);
+  return groups.map(group => `
+    <section class="grouped-indicator-section">
+      <div class="grouped-indicator-section-header">
+        <div class="grouped-indicator-section-title">
+          <h4>${escapeHtml(group.title)}</h4>
+        </div>
+        <span class="badge badge-blue">${group.indicators.length} indicador${group.indicators.length !== 1 ? 'es' : ''}</span>
+      </div>
+      <div class="grouped-indicator-section-body">
+        <div class="destination-cards">
+          ${group.indicators.map(ind => {
+            const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(ind));
+            return `
+              <article class="indicator-overview-card">
+                <div>
+                  <h4>${escapeHtml(ind.name)}</h4>
+                  <p>${escapeHtml(ind.description || 'Sin descripción cargada.')}</p>
+                </div>
+                <div class="indicator-overview-meta">
+                  <span>${escapeHtml(ind.unit || 'sin unidad')}</span>
+                  <span>${annualMeta.shortLabel}</span>
+                </div>
+                <div class="indicator-overview-meta">
+                  <span class="status-inline ${ind.has_data ? 'success' : 'warning'}">${ind.has_data ? 'Con datos' : 'Sin datos'}</span>
+                  <span>${getMetricKey(ind) || 'sin clave comparable'}</span>
+                </div>
+                <div class="card-actions">
+                  <button class="btn btn-primary btn-sm" onclick="selectIndicator('${ind.id}')">Abrir</button>
+                  <button class="btn btn-secondary btn-sm" onclick="openEditIndicatorModalById('${ind.id}')">Editar</button>
+                </div>
+              </article>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </section>
+  `).join('');
+}
+
 function getIndicatorsForDestination(destinationId) {
   if (destinationId === UNASSIGNED_DESTINATION_ID) {
     return indicators.filter(ind => !ind.destination_id);
@@ -526,15 +634,7 @@ function renderSidebar() {
 
   const items = getIndicatorsForDestination(currentDestination.id);
   sidebarList.innerHTML = items.length
-    ? items.map(ind => `
-        <button class="indicator-item ${currentIndicator?.id === ind.id ? 'active' : ''}" onclick="selectIndicator('${ind.id}')">
-          <span class="indicator-main">
-            <span class="ind-name">${escapeHtml(ind.name)}</span>
-            <span class="ind-unit">${escapeHtml(ind.unit || 'sin unidad')}</span>
-          </span>
-          ${ind.has_data ? '<span class="badge badge-green">datos</span>' : '<span class="badge badge-orange">vacío</span>'}
-        </button>
-      `).join('')
+    ? renderGroupedSidebarIndicators(items)
     : '<div class="sidebar-hint">Este destino todavía no tiene indicadores.</div>';
 }
 
@@ -595,29 +695,7 @@ function showCurrentDestinationOverview() {
     empty.style.display = 'block';
   } else {
     empty.style.display = 'none';
-    cards.innerHTML = items.map(ind => {
-      const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(ind));
-      return `
-        <article class="indicator-overview-card">
-          <div>
-            <h4>${escapeHtml(ind.name)}</h4>
-            <p>${escapeHtml(ind.description || 'Sin descripción cargada.')}</p>
-          </div>
-          <div class="indicator-overview-meta">
-            <span>${escapeHtml(ind.unit || 'sin unidad')}</span>
-            <span>${annualMeta.shortLabel}</span>
-          </div>
-          <div class="indicator-overview-meta">
-            <span>${ind.has_data ? 'Con datos' : 'Sin datos'}</span>
-            <span>${getMetricKey(ind) || 'sin clave comparable'}</span>
-          </div>
-          <div class="card-actions">
-            <button class="btn btn-primary btn-sm" onclick="selectIndicator('${ind.id}')">Abrir</button>
-            <button class="btn btn-secondary btn-sm" onclick="openEditIndicatorModalById('${ind.id}')">Editar</button>
-          </div>
-        </article>
-      `;
-    }).join('');
+    cards.innerHTML = renderGroupedOverviewCards(items);
   }
 
   document.getElementById('mainEmpty').style.display = 'none';
@@ -774,6 +852,18 @@ function populateMetricControls(currentValue = '') {
   document.getElementById('indFormulaDenominator').innerHTML = buildSelectOptions(denominator);
 }
 
+function populateGroupTitleSuggestions(selectedValue = '', destinationId = '') {
+  const datalist = document.getElementById('groupTitleSuggestions');
+  const scopedIndicators = destinationId && destinationId !== UNASSIGNED_DESTINATION_ID
+    ? indicators.filter(ind => ind.destination_id === destinationId)
+    : indicators;
+  const titles = [...new Set(scopedIndicators.map(ind => (ind.group_title || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+  datalist.innerHTML = titles.map(title => `<option value="${escapeHtml(title)}">`).join('');
+  if (selectedValue) {
+    document.getElementById('indGroupTitle').value = selectedValue;
+  }
+}
+
 function populateAnnualModeSelect(selectedMode = 'sum') {
   const select = document.getElementById('indAnnualCalcMode');
   select.innerHTML = Object.entries(ANNUAL_CALC_OPTIONS).map(([value, meta]) => `<option value="${value}" ${selectedMode === value ? 'selected' : ''}>${meta.label}</option>`).join('');
@@ -857,6 +947,7 @@ function resetIndicatorForm() {
   document.getElementById('indUnit').value = '';
   document.getElementById('indDesc').value = '';
   document.getElementById('indMetricKey').value = '';
+  document.getElementById('indGroupTitle').value = '';
   document.getElementById('indAnnualChartVisible').checked = true;
   document.getElementById('indFormulaMultiplier').value = '1';
   document.getElementById('indFormulaNumerator').dataset.current = '';
@@ -906,6 +997,7 @@ function applyIndicatorTemplate() {
   document.getElementById('indUnit').value = template.unit || '';
   document.getElementById('indDesc').value = template.description || '';
   document.getElementById('indMetricKey').value = getMetricKey(template);
+  document.getElementById('indGroupTitle').value = template.group_title || '';
   document.getElementById('indAnnualChartVisible').checked = template.annual_chart_visible !== false;
   document.getElementById('indFormulaMultiplier').value = template.formula_multiplier ?? 1;
   document.getElementById('indFormulaNumerator').dataset.current = template.formula_numerator_key || '';
@@ -914,6 +1006,7 @@ function applyIndicatorTemplate() {
   populateMetricControls(getMetricKey(template));
   toggleFormulaFields();
   populateDestinationSelect(destinationToKeep);
+  populateGroupTitleSuggestions(template.group_title || '', destinationToKeep);
   toast('Base copiada. Ahora ajustá el nombre o lo que necesites.', 'success');
 }
 
@@ -922,6 +1015,7 @@ function clearIndicatorTemplateSelection() {
   resetIndicatorForm();
   populateIndicatorTemplateSelect('');
   populateDestinationSelect(destinationToKeep);
+  populateGroupTitleSuggestions('', destinationToKeep);
   populateAnnualModeSelect('sum');
   populateMetricControls();
   toggleFormulaFields();
@@ -932,6 +1026,7 @@ function openNewIndicatorModal() {
   document.getElementById('indicatorTemplateSection').style.display = 'block';
   populateIndicatorTemplateSelect('');
   populateDestinationSelect(currentDestination?.id && currentDestination.id !== UNASSIGNED_DESTINATION_ID ? currentDestination.id : '');
+  populateGroupTitleSuggestions('', currentDestination?.id && currentDestination.id !== UNASSIGNED_DESTINATION_ID ? currentDestination.id : '');
   populateAnnualModeSelect('sum');
   populateMetricControls();
   toggleFormulaFields();
@@ -949,12 +1044,14 @@ function openEditIndicatorModal() {
   document.getElementById('indUnit').value = currentIndicator.unit || '';
   document.getElementById('indDesc').value = currentIndicator.description || '';
   document.getElementById('indMetricKey').value = getMetricKey(currentIndicator);
+  document.getElementById('indGroupTitle').value = currentIndicator.group_title || '';
   document.getElementById('indAnnualChartVisible').checked = currentIndicator.annual_chart_visible !== false;
   document.getElementById('indFormulaMultiplier').value = currentIndicator.formula_multiplier ?? 1;
   document.getElementById('indFormulaNumerator').dataset.current = currentIndicator.formula_numerator_key || '';
   document.getElementById('indFormulaDenominator').dataset.current = currentIndicator.formula_denominator_key || '';
   populateIndicatorTemplateSelect('');
   populateDestinationSelect(currentIndicator.destination_id || '');
+  populateGroupTitleSuggestions(currentIndicator.group_title || '', currentIndicator.destination_id || '');
   populateAnnualModeSelect(currentIndicator.annual_calc_mode || 'sum');
   populateMetricControls(getMetricKey(currentIndicator));
   toggleFormulaFields();
@@ -980,6 +1077,12 @@ document.addEventListener('input', (event) => {
   }
 });
 
+document.addEventListener('change', (event) => {
+  if (event.target?.id === 'indDestination') {
+    populateGroupTitleSuggestions(document.getElementById('indGroupTitle').value.trim(), event.target.value);
+  }
+});
+
 async function saveIndicator() {
   const id = document.getElementById('indicatorId').value;
   const payload = {
@@ -988,6 +1091,7 @@ async function saveIndicator() {
     unit: document.getElementById('indUnit').value.trim(),
     description: document.getElementById('indDesc').value.trim(),
     metric_key: document.getElementById('indMetricKey').value.trim() || slugify(document.getElementById('indName').value.trim()),
+    group_title: document.getElementById('indGroupTitle').value.trim(),
     annual_calc_mode: document.getElementById('indAnnualCalcMode').value,
     annual_chart_visible: document.getElementById('indAnnualChartVisible').checked,
     formula_numerator_key: document.getElementById('indFormulaNumerator').value,
@@ -1045,6 +1149,7 @@ function openDataModal() {
   document.getElementById('pasteArea').value = '';
   document.getElementById('pasteArea').style.borderColor = '';
   document.getElementById('pasteYear').value = years.length ? years[years.length - 1] : '';
+  selectedGridYears = [];
   renderGrid();
   document.getElementById('dataModal').classList.add('open');
 }
@@ -1057,6 +1162,7 @@ function renderGrid() {
   const grid = document.getElementById('monthGrid');
   if (!gridYears.length) {
     grid.innerHTML = '<div class="sidebar-hint" style="grid-column:1/-1;padding:16px 0">No hay años cargados todavía. Escribí un año y agregalo.</div>';
+    renderYearDeleteList();
     return;
   }
 
@@ -1072,6 +1178,7 @@ function renderGrid() {
     </div>`;
   });
   grid.innerHTML = html;
+  renderYearDeleteList();
 }
 
 function cellNav(event, yr, mi) {
@@ -1107,7 +1214,51 @@ function removeLastYear() {
   if (!gridYears.length) return;
   const removed = gridYears.pop();
   delete gridData[removed];
+  selectedGridYears = selectedGridYears.filter(year => year !== removed);
   renderGrid();
+}
+
+function renderYearDeleteList() {
+  const container = document.getElementById('yearDeleteList');
+  if (!container) return;
+  if (!gridYears.length) {
+    container.innerHTML = '<div class="help-text">Todavía no hay años cargados para seleccionar.</div>';
+    return;
+  }
+
+  const selected = new Set(selectedGridYears.filter(year => gridYears.includes(year)));
+  selectedGridYears = [...selected].sort((a, b) => a - b);
+  container.innerHTML = gridYears.map(year => {
+    const active = selected.has(year);
+    return `
+      <button type="button" class="year-delete-chip ${active ? 'active' : ''}" onclick="toggleGridYearSelection(${year})">
+        <span class="year-delete-chip-marker">${active ? '−' : '+'}</span>
+        <span>${year}</span>
+      </button>
+    `;
+  }).join('');
+}
+
+function toggleGridYearSelection(year) {
+  const next = new Set(selectedGridYears);
+  if (next.has(year)) next.delete(year); else next.add(year);
+  selectedGridYears = [...next].sort((a, b) => a - b);
+  renderYearDeleteList();
+}
+
+function removeSelectedYears() {
+  if (!selectedGridYears.length) {
+    toast('Seleccioná al menos un año para eliminar.', 'error');
+    return;
+  }
+  const yearsToRemove = [...selectedGridYears];
+  yearsToRemove.forEach(year => {
+    gridYears = gridYears.filter(item => item !== year);
+    delete gridData[year];
+  });
+  selectedGridYears = [];
+  renderGrid();
+  toast(`Se quitaron ${yearsToRemove.length} año${yearsToRemove.length !== 1 ? 's' : ''} de la grilla. Guardá para confirmar el cambio.`, 'success');
 }
 
 function handlePaste() {

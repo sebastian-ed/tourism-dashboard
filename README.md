@@ -70,3 +70,12 @@ Así el comparador puede tomar el mismo indicador y enfrentarlo entre destinos.
 │   └── exports.js
 └── supabase_schema.sql
 ```
+
+
+## Novedades de esta versión
+
+- títulos agrupadores por indicador para armar ramas visuales dentro de cada destino
+- eliminación selectiva de años desde el panel admin
+- estado de datos con color en las tarjetas de indicadores
+
+**Importante:** si ya tenías el proyecto en producción, ejecutá nuevamente `supabase_schema.sql` para agregar la columna `group_title` en `indicators`.

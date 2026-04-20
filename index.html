@@ -112,7 +112,7 @@
         <h3>Indicadores del destino</h3>
         <span class="badge badge-green">Seleccioná uno para abrir el dashboard</span>
       </div>
-      <div class="destination-cards" id="destinationCards"></div>
+      <div class="destination-groups" id="destinationCards"></div>
       <div class="empty-indicators" id="destinationCardsEmpty" style="display:none">Todavía no hay indicadores asociados a este destino.</div>
     </div>
 
@@ -286,6 +286,93 @@ function getDestinationById(destinationId) {
   return getRenderableDestinations().find(dest => dest.id === destinationId) || null;
 }
 
+function getIndicatorGroupTitle(indicator) {
+  return (indicator?.group_title || '').trim() || 'Sin agrupar';
+}
+
+function groupIndicatorsByTitle(items) {
+  const groups = new Map();
+  items.forEach(indicator => {
+    const title = getIndicatorGroupTitle(indicator);
+    if (!groups.has(title)) groups.set(title, []);
+    groups.get(title).push(indicator);
+  });
+
+  return [...groups.entries()]
+    .map(([title, indicators]) => ({
+      title,
+      indicators: [...indicators].sort((a, b) => a.name.localeCompare(b.name, 'es'))
+    }))
+    .sort((a, b) => {
+      if (a.title === 'Sin agrupar' && b.title !== 'Sin agrupar') return 1;
+      if (b.title === 'Sin agrupar' && a.title !== 'Sin agrupar') return -1;
+      return a.title.localeCompare(b.title, 'es');
+    });
+}
+
+function renderGroupedSidebarIndicators(items) {
+  const groups = groupIndicatorsByTitle(items);
+  return groups.map(group => `
+    <div class="indicator-tree-group">
+      <div class="indicator-tree-title">
+        <span>${escapeHtml(group.title)}</span>
+        <span class="tree-count">${group.indicators.length}</span>
+      </div>
+      <div class="indicator-tree-items">
+        ${group.indicators.map(ind => `
+          <button class="indicator-item ${currentIndicator?.id === ind.id ? 'active' : ''}" onclick="selectIndicator('${ind.id}')">
+            <span class="indicator-main">
+              <span class="ind-name">${escapeHtml(ind.name)}</span>
+              <span class="ind-unit">${escapeHtml(ind.unit || 'sin unidad')}</span>
+            </span>
+            ${ind.has_data ? '<span class="badge badge-green">datos</span>' : '<span class="badge badge-orange">vacío</span>'}
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderGroupedOverviewCards(items) {
+  const groups = groupIndicatorsByTitle(items);
+  return groups.map(group => `
+    <section class="grouped-indicator-section">
+      <div class="grouped-indicator-section-header">
+        <div class="grouped-indicator-section-title">
+          <h4>${escapeHtml(group.title)}</h4>
+        </div>
+        <span class="badge badge-blue">${group.indicators.length} indicador${group.indicators.length !== 1 ? 'es' : ''}</span>
+      </div>
+      <div class="grouped-indicator-section-body">
+        <div class="destination-cards">
+          ${group.indicators.map(ind => {
+            const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(ind));
+            return `
+              <article class="indicator-overview-card">
+                <div>
+                  <h4>${escapeHtml(ind.name)}</h4>
+                  <p>${escapeHtml(ind.description || 'Sin descripción cargada.')}</p>
+                </div>
+                <div class="indicator-overview-meta">
+                  <span>${escapeHtml(ind.unit || 'sin unidad')}</span>
+                  <span>${annualMeta.shortLabel}</span>
+                </div>
+                <div class="indicator-overview-meta">
+                  <span class="status-inline ${ind.has_data ? 'success' : 'warning'}">${ind.has_data ? 'Con datos' : 'Sin datos'}</span>
+                  <span>${getMetricKey(ind) || 'sin clave comparable'}</span>
+                </div>
+                <div class="card-actions">
+                  <button class="btn btn-primary btn-sm" onclick="selectIndicator('${ind.id}')">Ver indicador</button>
+                </div>
+              </article>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </section>
+  `).join('');
+}
+
 function getUniqueMetricOptions() {
   const byKey = new Map();
   indicators.forEach(ind => {
@@ -343,15 +430,7 @@ function renderSidebar() {
     return;
   }
 
-  sidebarList.innerHTML = currentIndicators.map(ind => `
-    <button class="indicator-item ${currentIndicator?.id === ind.id ? 'active' : ''}" onclick="selectIndicator('${ind.id}')">
-      <span class="indicator-main">
-        <span class="ind-name">${escapeHtml(ind.name)}</span>
-        <span class="ind-unit">${escapeHtml(ind.unit || 'sin unidad')}</span>
-      </span>
-      ${ind.has_data ? '<span class="badge badge-green">datos</span>' : '<span class="badge badge-orange">vacío</span>'}
-    </button>
-  `).join('');
+  sidebarList.innerHTML = renderGroupedSidebarIndicators(currentIndicators);
 }
 
 async function selectDestination(destinationId) {
@@ -397,28 +476,7 @@ function showCurrentDestinationOverview() {
     empty.style.display = 'block';
   } else {
     empty.style.display = 'none';
-    cards.innerHTML = items.map(ind => {
-      const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(ind));
-      return `
-        <article class="indicator-overview-card">
-          <div>
-            <h4>${escapeHtml(ind.name)}</h4>
-            <p>${escapeHtml(ind.description || 'Sin descripción cargada.')}</p>
-          </div>
-          <div class="indicator-overview-meta">
-            <span>${escapeHtml(ind.unit || 'sin unidad')}</span>
-            <span>${annualMeta.shortLabel}</span>
-          </div>
-          <div class="indicator-overview-meta">
-            <span>${ind.has_data ? 'Con datos' : 'Sin datos'}</span>
-            <span>${getMetricKey(ind) || 'sin clave comparable'}</span>
-          </div>
-          <div class="card-actions">
-            <button class="btn btn-primary btn-sm" onclick="selectIndicator('${ind.id}')">Ver indicador</button>
-          </div>
-        </article>
-      `;
-    }).join('');
+    cards.innerHTML = renderGroupedOverviewCards(items);
   }
 
   document.getElementById('mainEmpty').style.display = 'none';
