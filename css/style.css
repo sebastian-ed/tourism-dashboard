@@ -372,11 +372,15 @@ input, select, textarea { font-family: inherit; }
   display: grid;
   gap: 12px;
 }
+.grouped-indicator-section.is-collapsed {
+  gap: 0;
+}
 .grouped-indicator-section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  width: 100%;
   padding: 12px 16px;
   border: 1px solid var(--border-light);
   border-radius: var(--radius);
@@ -416,6 +420,42 @@ input, select, textarea { font-family: inherit; }
 .grouped-indicator-section-body .destination-cards {
   padding: 0;
 }
+.group-toggle-btn {
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+.group-toggle-btn:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+.group-toggle-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.group-toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(59,130,246,.1);
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1;
+  transition: transform .15s ease, background .15s ease;
+  flex: 0 0 auto;
+}
+.indicator-tree-group.is-collapsed .group-toggle-icon,
+.grouped-indicator-section.is-collapsed .group-toggle-icon {
+  transform: rotate(-90deg);
+}
+.grouped-indicator-section.is-collapsed .grouped-indicator-section-body,
+.indicator-tree-group.is-collapsed .indicator-tree-items {
+  display: none;
+}
 .status-inline {
   font-weight: 700;
 }
@@ -429,6 +469,7 @@ input, select, textarea { font-family: inherit; }
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  width: 100%;
   padding: 8px 12px 8px 14px;
   color: var(--text-subtle);
   font-size: 11px;
@@ -436,6 +477,9 @@ input, select, textarea { font-family: inherit; }
   letter-spacing: .08em;
   text-transform: uppercase;
   position: relative;
+  border: none;
+  background: transparent;
+  text-align: left;
 }
 .indicator-tree-title::before {
   content: '';

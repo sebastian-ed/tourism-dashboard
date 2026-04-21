@@ -424,6 +424,7 @@ let gridYears = [];
 let gridData = {};
 let selectedGridYears = [];
 let comparisonSelection = { metricKey: '', destinationIds: [] };
+const groupCollapseState = { sidebar: {}, center: {} };
 
 window.addEventListener('DOMContentLoaded', async () => {
   const session = await getSession();
@@ -524,68 +525,109 @@ function groupIndicatorsByTitle(items) {
     });
 }
 
-function renderGroupedSidebarIndicators(items) {
-  const groups = groupIndicatorsByTitle(items);
-  return groups.map(group => `
-    <div class="indicator-tree-group">
-      <div class="indicator-tree-title">
-        <span>${escapeHtml(group.title)}</span>
-        <span class="tree-count">${group.indicators.length}</span>
-      </div>
-      <div class="indicator-tree-items">
-        ${group.indicators.map(ind => `
-          <button class="indicator-item ${currentIndicator?.id === ind.id ? 'active' : ''}" onclick="selectIndicator('${ind.id}')">
-            <span class="indicator-main">
-              <span class="ind-name">${escapeHtml(ind.name)}</span>
-              <span class="ind-unit">${escapeHtml(ind.unit || 'sin unidad')}</span>
-            </span>
-            ${ind.has_data ? '<span class="badge badge-green">datos</span>' : '<span class="badge badge-orange">vacío</span>'}
-          </button>
-        `).join('')}
-      </div>
-    </div>
-  `).join('');
+function getGroupStateKey(destinationId, groupTitle) {
+  return `${destinationId || UNASSIGNED_DESTINATION_ID}::${groupTitle}`;
 }
 
-function renderGroupedOverviewCards(items) {
+function isGroupCollapsed(scope, destinationId, groupTitle) {
+  const key = getGroupStateKey(destinationId, groupTitle);
+  return Boolean(groupCollapseState[scope]?.[key]);
+}
+
+function ensureIndicatorGroupExpanded(indicator, destinationId) {
+  if (!indicator) return;
+  const key = getGroupStateKey(destinationId, getIndicatorGroupTitle(indicator));
+  groupCollapseState.sidebar[key] = false;
+  groupCollapseState.center[key] = false;
+}
+
+function toggleGroupVisibility(scope, destinationId, encodedGroupTitle) {
+  const groupTitle = decodeURIComponent(encodedGroupTitle);
+  const key = getGroupStateKey(destinationId, groupTitle);
+  if (!groupCollapseState[scope]) groupCollapseState[scope] = {};
+  groupCollapseState[scope][key] = !groupCollapseState[scope][key];
+
+  if (scope === 'sidebar') {
+    renderSidebar();
+  } else if (currentDestination) {
+    showCurrentDestinationOverview();
+  }
+}
+
+function renderGroupedSidebarIndicators(items, destinationId) {
   const groups = groupIndicatorsByTitle(items);
-  return groups.map(group => `
-    <section class="grouped-indicator-section">
-      <div class="grouped-indicator-section-header">
-        <div class="grouped-indicator-section-title">
-          <h4>${escapeHtml(group.title)}</h4>
-        </div>
-        <span class="badge badge-blue">${group.indicators.length} indicador${group.indicators.length !== 1 ? 'es' : ''}</span>
-      </div>
-      <div class="grouped-indicator-section-body">
-        <div class="destination-cards">
-          ${group.indicators.map(ind => {
-            const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(ind));
-            return `
-              <article class="indicator-overview-card">
-                <div>
-                  <h4>${escapeHtml(ind.name)}</h4>
-                  <p>${escapeHtml(ind.description || 'Sin descripción cargada.')}</p>
-                </div>
-                <div class="indicator-overview-meta">
-                  <span>${escapeHtml(ind.unit || 'sin unidad')}</span>
-                  <span>${annualMeta.shortLabel}</span>
-                </div>
-                <div class="indicator-overview-meta">
-                  <span class="status-inline ${ind.has_data ? 'success' : 'warning'}">${ind.has_data ? 'Con datos' : 'Sin datos'}</span>
-                  <span>${getMetricKey(ind) || 'sin clave comparable'}</span>
-                </div>
-                <div class="card-actions">
-                  <button class="btn btn-primary btn-sm" onclick="selectIndicator('${ind.id}')">Abrir</button>
-                  <button class="btn btn-secondary btn-sm" onclick="openEditIndicatorModalById('${ind.id}')">Editar</button>
-                </div>
-              </article>
-            `;
-          }).join('')}
+  return groups.map(group => {
+    const collapsed = isGroupCollapsed('sidebar', destinationId, group.title);
+    const encodedTitle = encodeURIComponent(group.title);
+    return `
+      <div class="indicator-tree-group ${collapsed ? 'is-collapsed' : ''}">
+        <button type="button" class="indicator-tree-title group-toggle-btn" onclick="toggleGroupVisibility('sidebar', '${escapeJs(destinationId)}', '${encodedTitle}')">
+          <span class="group-toggle-main">
+            <span class="group-toggle-icon">▾</span>
+            <span>${escapeHtml(group.title)}</span>
+          </span>
+          <span class="tree-count">${group.indicators.length}</span>
+        </button>
+        <div class="indicator-tree-items">
+          ${group.indicators.map(ind => `
+            <button class="indicator-item ${currentIndicator?.id === ind.id ? 'active' : ''}" onclick="selectIndicator('${ind.id}')">
+              <span class="indicator-main">
+                <span class="ind-name">${escapeHtml(ind.name)}</span>
+                <span class="ind-unit">${escapeHtml(ind.unit || 'sin unidad')}</span>
+              </span>
+              ${ind.has_data ? '<span class="badge badge-green">datos</span>' : '<span class="badge badge-orange">vacío</span>'}
+            </button>
+          `).join('')}
         </div>
       </div>
-    </section>
-  `).join('');
+    `;
+  }).join('');
+}
+
+function renderGroupedOverviewCards(items, destinationId) {
+  const groups = groupIndicatorsByTitle(items);
+  return groups.map(group => {
+    const collapsed = isGroupCollapsed('center', destinationId, group.title);
+    const encodedTitle = encodeURIComponent(group.title);
+    return `
+      <section class="grouped-indicator-section ${collapsed ? 'is-collapsed' : ''}">
+        <button type="button" class="grouped-indicator-section-header group-toggle-btn" onclick="toggleGroupVisibility('center', '${escapeJs(destinationId)}', '${encodedTitle}')">
+          <div class="grouped-indicator-section-title">
+            <span class="group-toggle-icon">▾</span>
+            <h4>${escapeHtml(group.title)}</h4>
+          </div>
+          <span class="badge badge-blue">${group.indicators.length} indicador${group.indicators.length !== 1 ? 'es' : ''}</span>
+        </button>
+        <div class="grouped-indicator-section-body">
+          <div class="destination-cards">
+            ${group.indicators.map(ind => {
+              const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(ind));
+              return `
+                <article class="indicator-overview-card">
+                  <div>
+                    <h4>${escapeHtml(ind.name)}</h4>
+                    <p>${escapeHtml(ind.description || 'Sin descripción cargada.')}</p>
+                  </div>
+                  <div class="indicator-overview-meta">
+                    <span>${escapeHtml(ind.unit || 'sin unidad')}</span>
+                    <span>${annualMeta.shortLabel}</span>
+                  </div>
+                  <div class="indicator-overview-meta">
+                    <span class="status-inline ${ind.has_data ? 'success' : 'warning'}">${ind.has_data ? 'Con datos' : 'Sin datos'}</span>
+                    <span>${getMetricKey(ind) || 'sin clave comparable'}</span>
+                  </div>
+                  <div class="card-actions">
+                    <button class="btn btn-primary btn-sm" onclick="selectIndicator('${ind.id}')">Abrir</button>
+                    <button class="btn btn-secondary btn-sm" onclick="openEditIndicatorModalById('${ind.id}')">Editar</button>
+                  </div>
+                </article>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      </section>
+    `;
+  }).join('');
 }
 
 function getIndicatorsForDestination(destinationId) {
@@ -634,7 +676,7 @@ function renderSidebar() {
 
   const items = getIndicatorsForDestination(currentDestination.id);
   sidebarList.innerHTML = items.length
-    ? renderGroupedSidebarIndicators(items)
+    ? renderGroupedSidebarIndicators(items, currentDestination.id)
     : '<div class="sidebar-hint">Este destino todavía no tiene indicadores.</div>';
 }
 
@@ -695,7 +737,7 @@ function showCurrentDestinationOverview() {
     empty.style.display = 'block';
   } else {
     empty.style.display = 'none';
-    cards.innerHTML = renderGroupedOverviewCards(items);
+    cards.innerHTML = renderGroupedOverviewCards(items, currentDestination.id);
   }
 
   document.getElementById('mainEmpty').style.display = 'none';
@@ -708,6 +750,7 @@ async function selectIndicator(id, { silent = false } = {}) {
   if (!currentIndicator) return;
 
   const destinationId = currentIndicator.destination_id || UNASSIGNED_DESTINATION_ID;
+  ensureIndicatorGroupExpanded(currentIndicator, destinationId);
   currentDestination = getDestinationById(destinationId);
   currentDestinationIndicators = getIndicatorsForDestination(destinationId);
   renderSidebar();
@@ -1527,6 +1570,14 @@ async function handlePdfExport() {
   } catch (e) {
     toast('Error: ' + e.message, 'error');
   }
+}
+
+function escapeJs(value) {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r');
 }
 
 function escapeHtml(value) {
