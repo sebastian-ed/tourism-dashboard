@@ -166,17 +166,21 @@ async function updateIndicatorsSortOrder(destinationId, orderedIds) {
   const uniqueIds = [...new Set((orderedIds || []).filter(Boolean))];
   if (!uniqueIds.length) return;
 
-  const updates = uniqueIds.map((id, index) => ({
-    id,
-    sort_order: index,
-    updated_at: new Date().toISOString(),
-  }));
+  const timestamp = new Date().toISOString();
+  const updates = uniqueIds.map((id, index) =>
+    getSupabase()
+      .from('indicators')
+      .update({
+        sort_order: index,
+        updated_at: timestamp,
+      })
+      .eq('id', id)
+      .eq('destination_id', destinationId)
+  );
 
-  const { error } = await getSupabase()
-    .from('indicators')
-    .upsert(updates, { onConflict: 'id' });
-
-  if (error) throw error;
+  const results = await Promise.all(updates);
+  const failed = results.find(result => result.error);
+  if (failed?.error) throw failed.error;
 }
 
 // ── DATA POINTS ─────────────────────────────────────────────
