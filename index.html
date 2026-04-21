@@ -455,6 +455,22 @@ async function hydrateDestinationDataStatus(destinationId) {
   }
 }
 
+async function refreshIndicatorsDataStatus(indicatorIds) {
+  const ids = [...new Set((indicatorIds || []).filter(Boolean))];
+  if (!ids.length) return;
+  try {
+    const presence = await fetchIndicatorsWithData(ids);
+    indicators.forEach(ind => {
+      if (ids.includes(ind.id)) ind.has_data = presence.has(ind.id);
+    });
+    if (currentIndicator && ids.includes(currentIndicator.id)) {
+      currentIndicator.has_data = presence.has(currentIndicator.id);
+    }
+  } catch (e) {
+    // no-op
+  }
+}
+
 function renderSidebar() {
   const destinationList = document.getElementById('destinationList');
   const allDestinations = getRenderableDestinations();
@@ -572,6 +588,9 @@ async function selectIndicator(id) {
     const dataByIndicator = buildDataByIndicator(allPoints);
     const currentPoints = dataByIndicator[currentIndicator.id] || [];
     currentIndicator.has_data = currentPoints.length > 0;
+    const indicatorRef = indicators.find(ind => ind.id === currentIndicator.id);
+    if (indicatorRef) indicatorRef.has_data = currentIndicator.has_data;
+    renderSidebar();
     currentDataByYear = buildDataByYear(currentPoints);
     const relatedSeriesMap = buildRelatedSeriesMapForDestination(currentIndicator, destinationIndicators, dataByIndicator);
     currentYearlyStats = calcYearlyStats(currentDataByYear, { indicator: currentIndicator, relatedSeriesMap });

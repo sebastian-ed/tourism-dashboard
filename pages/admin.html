@@ -944,6 +944,22 @@ async function hydrateDestinationDataStatus(destinationId) {
   }
 }
 
+async function refreshIndicatorsDataStatus(indicatorIds) {
+  const ids = [...new Set((indicatorIds || []).filter(Boolean))];
+  if (!ids.length) return;
+  try {
+    const presence = await fetchIndicatorsWithData(ids);
+    indicators.forEach(ind => {
+      if (ids.includes(ind.id)) ind.has_data = presence.has(ind.id);
+    });
+    if (currentIndicator && ids.includes(currentIndicator.id)) {
+      currentIndicator.has_data = presence.has(currentIndicator.id);
+    }
+  } catch (e) {
+    // no rompo la UI por una capa visual
+  }
+}
+
 async function selectDestination(destinationId) {
   currentDestination = getDestinationById(destinationId);
   if (!currentDestination) return;
@@ -1011,6 +1027,9 @@ async function selectIndicator(id, { silent = false } = {}) {
     currentDataByIndicator = buildDataByIndicator(allPoints);
     currentDataPoints = currentDataByIndicator[currentIndicator.id] || [];
     currentIndicator.has_data = currentDataPoints.length > 0;
+    const indicatorRef = indicators.find(ind => ind.id === currentIndicator.id);
+    if (indicatorRef) indicatorRef.has_data = currentIndicator.has_data;
+    renderSidebar();
     currentDataByYear = buildDataByYear(currentDataPoints);
     currentRelatedSeriesMap = buildRelatedSeriesMapForDestination(currentIndicator, currentDestinationIndicators, currentDataByIndicator);
     currentYearlyStats = calcYearlyStats(currentDataByYear, {
@@ -1688,7 +1707,13 @@ async function saveData() {
     if (points.length) {
       await upsertDataPoints(points);
     }
-    currentIndicator.has_data = points.length > 0;
+
+    const verifiedPoints = await fetchDataPoints(currentIndicator.id);
+    if (points.length > 0 && verifiedPoints.length === 0) {
+      throw new Error('Supabase respondió sin error, pero no devolvió datos persistidos. Reintentá la carga.');
+    }
+
+    await refreshIndicatorsDataStatus([currentIndicator.id]);
     closeDataModal();
     await selectIndicator(currentIndicator.id, { silent: true });
     renderSidebar();
