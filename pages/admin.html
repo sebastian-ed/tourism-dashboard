@@ -780,6 +780,7 @@ async function persistIndicatorOrder(destinationId, orderedIds) {
 async function handleIndicatorDrop(event, targetIndicatorId, destinationId) {
   if (!canHandleIndicatorDrop(destinationId)) return;
   event.preventDefault();
+  event.stopPropagation();
   const rect = event.currentTarget.getBoundingClientRect();
   const insertAfter = event.clientY > rect.top + event.currentTarget.offsetHeight / 2;
   const orderedIds = getReorderedIndicatorIds(destinationId, dragState.indicatorId, targetIndicatorId, insertAfter);
@@ -791,6 +792,7 @@ async function handleIndicatorDrop(event, targetIndicatorId, destinationId) {
 async function handleIndicatorDropToEnd(event, destinationId) {
   if (!canHandleIndicatorDrop(destinationId)) return;
   event.preventDefault();
+  event.stopPropagation();
   clearDragClasses();
   const orderedIds = getReorderedIndicatorIds(destinationId, dragState.indicatorId);
   await persistIndicatorOrder(destinationId, orderedIds);
