@@ -426,6 +426,7 @@ let selectedGridYears = [];
 let comparisonSelection = { metricKey: '', destinationIds: [] };
 const groupCollapseState = { sidebar: {}, center: {} };
 let dragState = { indicatorId: '', destinationId: '' };
+let groupDragState = { destinationId: '', groupTitle: '' };
 
 function getIndicatorSortOrder(indicator) {
   const value = Number(indicator?.sort_order);
@@ -581,9 +582,10 @@ function renderGroupedSidebarIndicators(items, destinationId) {
     const collapsed = isGroupCollapsed('sidebar', destinationId, group.title);
     const encodedTitle = encodeURIComponent(group.title);
     return `
-      <div class="indicator-tree-group ${collapsed ? 'is-collapsed' : ''}">
-        <button type="button" class="indicator-tree-title group-toggle-btn" onclick="toggleGroupVisibility('sidebar', '${escapeJs(destinationId)}', '${encodedTitle}')">
+      <div class="indicator-tree-group ${collapsed ? 'is-collapsed' : ''}" ondragover="handleGroupDragOver(event, '${escapeJs(destinationId)}')" ondragleave="handleGroupDragLeave(event)" ondrop="handleGroupDrop(event, '${encodedTitle}', '${escapeJs(destinationId)}')">
+        <button type="button" class="indicator-tree-title group-toggle-btn admin-group-draggable" onclick="toggleGroupVisibility('sidebar', '${escapeJs(destinationId)}', '${encodedTitle}')" draggable="true" ondragstart="handleGroupDragStart(event, '${escapeJs(destinationId)}', '${encodedTitle}')" ondragend="handleGroupDragEnd(event)">
           <span class="group-toggle-main">
+            <span class="group-drag-handle" title="Arrastrar grupo para ordenar">⋮⋮</span>
             <span class="group-toggle-icon">▾</span>
             <span>${escapeHtml(group.title)}</span>
           </span>
@@ -624,9 +626,10 @@ function renderGroupedOverviewCards(items, destinationId) {
     const collapsed = isGroupCollapsed('center', destinationId, group.title);
     const encodedTitle = encodeURIComponent(group.title);
     return `
-      <section class="grouped-indicator-section ${collapsed ? 'is-collapsed' : ''}">
-        <button type="button" class="grouped-indicator-section-header group-toggle-btn" onclick="toggleGroupVisibility('center', '${escapeJs(destinationId)}', '${encodedTitle}')">
+      <section class="grouped-indicator-section ${collapsed ? 'is-collapsed' : ''}" ondragover="handleGroupDragOver(event, '${escapeJs(destinationId)}')" ondragleave="handleGroupDragLeave(event)" ondrop="handleGroupDrop(event, '${encodedTitle}', '${escapeJs(destinationId)}')">
+        <button type="button" class="grouped-indicator-section-header group-toggle-btn admin-group-draggable" onclick="toggleGroupVisibility('center', '${escapeJs(destinationId)}', '${encodedTitle}')" draggable="true" ondragstart="handleGroupDragStart(event, '${escapeJs(destinationId)}', '${encodedTitle}')" ondragend="handleGroupDragEnd(event)">
           <div class="grouped-indicator-section-title">
+            <span class="group-drag-handle" title="Arrastrar grupo para ordenar">⋮⋮</span>
             <span class="group-toggle-icon">▾</span>
             <h4>${escapeHtml(group.title)}</h4>
           </div>
@@ -689,6 +692,91 @@ function clearDragClasses() {
   document.querySelectorAll('.drop-before, .drop-after, .drop-inside, .is-dragging').forEach(el => {
     el.classList.remove('drop-before', 'drop-after', 'drop-inside', 'is-dragging');
   });
+}
+
+function handleGroupDragStart(event, destinationId, encodedGroupTitle) {
+  groupDragState = { destinationId, groupTitle: decodeURIComponent(encodedGroupTitle) };
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', encodedGroupTitle);
+  }
+  requestAnimationFrame(() => {
+    event.currentTarget.classList.add('is-dragging');
+  });
+}
+
+function handleGroupDragEnd(event) {
+  event.currentTarget.classList.remove('is-dragging');
+  clearDragClasses();
+  groupDragState = { destinationId: '', groupTitle: '' };
+}
+
+function canHandleGroupDrop(destinationId) {
+  return Boolean(groupDragState.groupTitle) && groupDragState.destinationId === destinationId;
+}
+
+function handleGroupDragOver(event, destinationId) {
+  if (!canHandleGroupDrop(destinationId)) return;
+  event.preventDefault();
+  const target = event.currentTarget;
+  const rect = target.getBoundingClientRect();
+  const insertAfter = event.clientY > rect.top + rect.height / 2;
+  target.classList.add(insertAfter ? 'drop-after' : 'drop-before');
+  target.classList.remove(insertAfter ? 'drop-before' : 'drop-after');
+}
+
+function handleGroupDragLeave(event) {
+  event.currentTarget.classList.remove('drop-before', 'drop-after', 'drop-inside');
+}
+
+function getOrderedGroupsForDestination(destinationId) {
+  return groupIndicatorsByTitle(getIndicatorsForDestination(destinationId));
+}
+
+function getReorderedGroupTitles(destinationId, draggedTitle, targetTitle = null, insertAfter = false) {
+  const orderedTitles = getOrderedGroupsForDestination(destinationId).map(group => group.title).filter(title => title !== draggedTitle);
+  if (!targetTitle) {
+    orderedTitles.push(draggedTitle);
+    return orderedTitles;
+  }
+
+  const targetIndex = orderedTitles.indexOf(targetTitle);
+  if (targetIndex === -1) {
+    orderedTitles.push(draggedTitle);
+    return orderedTitles;
+  }
+
+  orderedTitles.splice(insertAfter ? targetIndex + 1 : targetIndex, 0, draggedTitle);
+  return orderedTitles;
+}
+
+async function persistGroupOrder(destinationId, orderedGroupTitles) {
+  const scopedIndicators = getIndicatorsForDestination(destinationId);
+  const groupedMap = new Map(groupIndicatorsByTitle(scopedIndicators).map(group => [group.title, group.indicators]));
+  const flattenedIndicators = [];
+
+  orderedGroupTitles.forEach(title => {
+    const groupItems = groupedMap.get(title) || [];
+    groupItems.forEach(indicator => flattenedIndicators.push(indicator));
+  });
+
+  if (!flattenedIndicators.length) return;
+
+  const orderedIds = flattenedIndicators.map(indicator => indicator.id);
+  await persistIndicatorOrder(destinationId, orderedIds);
+}
+
+async function handleGroupDrop(event, encodedTargetGroupTitle, destinationId) {
+  if (!canHandleGroupDrop(destinationId)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const targetTitle = decodeURIComponent(encodedTargetGroupTitle);
+  const rect = event.currentTarget.getBoundingClientRect();
+  const insertAfter = event.clientY > rect.top + rect.height / 2;
+  const orderedGroupTitles = getReorderedGroupTitles(destinationId, groupDragState.groupTitle, targetTitle, insertAfter);
+  clearDragClasses();
+  await persistGroupOrder(destinationId, orderedGroupTitles);
+  groupDragState = { destinationId: '', groupTitle: '' };
 }
 
 function handleIndicatorDragStart(event, indicatorId, destinationId) {
