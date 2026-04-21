@@ -425,6 +425,24 @@ let gridData = {};
 let selectedGridYears = [];
 let comparisonSelection = { metricKey: '', destinationIds: [] };
 const groupCollapseState = { sidebar: {}, center: {} };
+let dragState = { indicatorId: '', destinationId: '' };
+
+function getIndicatorSortOrder(indicator) {
+  const value = Number(indicator?.sort_order);
+  return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+}
+
+function compareIndicatorsForOrdering(a, b) {
+  const orderDiff = getIndicatorSortOrder(a) - getIndicatorSortOrder(b);
+  if (orderDiff !== 0) return orderDiff;
+  return (a?.name || '').localeCompare(b?.name || '', 'es');
+}
+
+function getNextSortOrderForDestination(destinationId, excludeId = null) {
+  const scoped = indicators.filter(ind => (ind.destination_id || '') === (destinationId || '') && ind.id !== excludeId);
+  if (!scoped.length) return 0;
+  return Math.max(...scoped.map(getIndicatorSortOrder).filter(Number.isFinite)) + 1;
+}
 
 window.addEventListener('DOMContentLoaded', async () => {
   const session = await getSession();
@@ -470,7 +488,7 @@ async function loadCoreData({ keepSelection = true } = {}) {
   indicators.sort((a, b) => {
     const destA = (a.destination?.name || 'Sin destino').localeCompare(b.destination?.name || 'Sin destino', 'es');
     if (destA !== 0) return destA;
-    return a.name.localeCompare(b.name, 'es');
+    return compareIndicatorsForOrdering(a, b);
   });
 
   const renderableDestinations = getRenderableDestinations();
@@ -506,8 +524,9 @@ function getIndicatorGroupTitle(indicator) {
 }
 
 function groupIndicatorsByTitle(items) {
+  const orderedItems = [...items].sort(compareIndicatorsForOrdering);
   const groups = new Map();
-  items.forEach(indicator => {
+  orderedItems.forEach(indicator => {
     const title = getIndicatorGroupTitle(indicator);
     if (!groups.has(title)) groups.set(title, []);
     groups.get(title).push(indicator);
@@ -516,9 +535,11 @@ function groupIndicatorsByTitle(items) {
   return [...groups.entries()]
     .map(([title, indicators]) => ({
       title,
-      indicators: [...indicators].sort((a, b) => a.name.localeCompare(b.name, 'es'))
+      indicators,
+      sortRank: Math.min(...indicators.map(getIndicatorSortOrder)),
     }))
     .sort((a, b) => {
+      if (a.sortRank !== b.sortRank) return a.sortRank - b.sortRank;
       if (a.title === 'Sin agrupar' && b.title !== 'Sin agrupar') return 1;
       if (b.title === 'Sin agrupar' && a.title !== 'Sin agrupar') return -1;
       return a.title.localeCompare(b.title, 'es');
@@ -568,14 +589,27 @@ function renderGroupedSidebarIndicators(items, destinationId) {
           </span>
           <span class="tree-count">${group.indicators.length}</span>
         </button>
-        <div class="indicator-tree-items">
+        <div class="indicator-tree-items drag-drop-zone" ondragover="handleIndicatorListDragOver(event, '${escapeJs(destinationId)}')" ondragleave="handleIndicatorDragLeave(event)" ondrop="handleIndicatorDropToEnd(event, '${escapeJs(destinationId)}')">
           ${group.indicators.map(ind => `
-            <button class="indicator-item ${currentIndicator?.id === ind.id ? 'active' : ''}" onclick="selectIndicator('${ind.id}')">
+            <button
+              class="indicator-item ${currentIndicator?.id === ind.id ? 'active' : ''}"
+              onclick="selectIndicator('${ind.id}')"
+              draggable="true"
+              data-destination-id="${escapeHtml(destinationId)}"
+              ondragstart="handleIndicatorDragStart(event, '${ind.id}', '${escapeJs(destinationId)}')"
+              ondragend="handleIndicatorDragEnd(event)"
+              ondragover="handleIndicatorDragOver(event, '${escapeJs(destinationId)}')"
+              ondragleave="handleIndicatorDragLeave(event)"
+              ondrop="handleIndicatorDrop(event, '${ind.id}', '${escapeJs(destinationId)}')"
+            >
               <span class="indicator-main">
                 <span class="ind-name">${escapeHtml(ind.name)}</span>
                 <span class="ind-unit">${escapeHtml(ind.unit || 'sin unidad')}</span>
               </span>
-              ${ind.has_data ? '<span class="badge badge-green">datos</span>' : '<span class="badge badge-orange">vacío</span>'}
+              <span class="indicator-item-side">
+                ${ind.has_data ? '<span class="badge badge-green">datos</span>' : '<span class="badge badge-orange">vacío</span>'}
+                <span class="drag-handle" title="Arrastrar para reordenar">⋮⋮</span>
+              </span>
             </button>
           `).join('')}
         </div>
@@ -599,11 +633,24 @@ function renderGroupedOverviewCards(items, destinationId) {
           <span class="badge badge-blue">${group.indicators.length} indicador${group.indicators.length !== 1 ? 'es' : ''}</span>
         </button>
         <div class="grouped-indicator-section-body">
-          <div class="destination-cards">
+          <div class="destination-cards drag-drop-zone" ondragover="handleIndicatorListDragOver(event, '${escapeJs(destinationId)}')" ondragleave="handleIndicatorDragLeave(event)" ondrop="handleIndicatorDropToEnd(event, '${escapeJs(destinationId)}')">
             ${group.indicators.map(ind => {
               const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(ind));
               return `
-                <article class="indicator-overview-card">
+                <article
+                  class="indicator-overview-card admin-draggable-card"
+                  draggable="true"
+                  data-destination-id="${escapeHtml(destinationId)}"
+                  ondragstart="handleIndicatorDragStart(event, '${ind.id}', '${escapeJs(destinationId)}')"
+                  ondragend="handleIndicatorDragEnd(event)"
+                  ondragover="handleIndicatorDragOver(event, '${escapeJs(destinationId)}')"
+                  ondragleave="handleIndicatorDragLeave(event)"
+                  ondrop="handleIndicatorDrop(event, '${ind.id}', '${escapeJs(destinationId)}')"
+                >
+                  <div class="drag-card-top">
+                    <span class="drag-handle" title="Arrastrar para reordenar">⋮⋮</span>
+                    <span class="drag-help">Arrastrá para ordenar</span>
+                  </div>
                   <div>
                     <h4>${escapeHtml(ind.name)}</h4>
                     <p>${escapeHtml(ind.description || 'Sin descripción cargada.')}</p>
@@ -617,8 +664,8 @@ function renderGroupedOverviewCards(items, destinationId) {
                     <span>${getMetricKey(ind) || 'sin clave comparable'}</span>
                   </div>
                   <div class="card-actions">
-                    <button class="btn btn-primary btn-sm" onclick="selectIndicator('${ind.id}')">Abrir</button>
-                    <button class="btn btn-secondary btn-sm" onclick="openEditIndicatorModalById('${ind.id}')">Editar</button>
+                    <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); selectIndicator('${ind.id}')">Abrir</button>
+                    <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openEditIndicatorModalById('${ind.id}')">Editar</button>
                   </div>
                 </article>
               `;
@@ -631,10 +678,123 @@ function renderGroupedOverviewCards(items, destinationId) {
 }
 
 function getIndicatorsForDestination(destinationId) {
-  if (destinationId === UNASSIGNED_DESTINATION_ID) {
-    return indicators.filter(ind => !ind.destination_id);
+  const scoped = destinationId === UNASSIGNED_DESTINATION_ID
+    ? indicators.filter(ind => !ind.destination_id)
+    : indicators.filter(ind => ind.destination_id === destinationId);
+
+  return [...scoped].sort(compareIndicatorsForOrdering);
+}
+
+function clearDragClasses() {
+  document.querySelectorAll('.drop-before, .drop-after, .drop-inside, .is-dragging').forEach(el => {
+    el.classList.remove('drop-before', 'drop-after', 'drop-inside', 'is-dragging');
+  });
+}
+
+function handleIndicatorDragStart(event, indicatorId, destinationId) {
+  dragState = { indicatorId, destinationId };
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', indicatorId);
   }
-  return indicators.filter(ind => ind.destination_id === destinationId);
+  requestAnimationFrame(() => {
+    event.currentTarget.classList.add('is-dragging');
+  });
+}
+
+function handleIndicatorDragEnd(event) {
+  event.currentTarget.classList.remove('is-dragging');
+  clearDragClasses();
+  dragState = { indicatorId: '', destinationId: '' };
+}
+
+function canHandleIndicatorDrop(destinationId) {
+  return Boolean(dragState.indicatorId) && dragState.destinationId === destinationId;
+}
+
+function handleIndicatorDragOver(event, destinationId) {
+  if (!canHandleIndicatorDrop(destinationId)) return;
+  event.preventDefault();
+  const target = event.currentTarget;
+  const rect = target.getBoundingClientRect();
+  const insertAfter = event.clientY > rect.top + rect.height / 2;
+  target.classList.add(insertAfter ? 'drop-after' : 'drop-before');
+  target.classList.remove(insertAfter ? 'drop-before' : 'drop-after');
+}
+
+function handleIndicatorDragLeave(event) {
+  event.currentTarget.classList.remove('drop-before', 'drop-after', 'drop-inside');
+}
+
+function handleIndicatorListDragOver(event, destinationId) {
+  if (!canHandleIndicatorDrop(destinationId)) return;
+  event.preventDefault();
+  event.currentTarget.classList.add('drop-inside');
+}
+
+function getReorderedIndicatorIds(destinationId, draggedId, targetId = null, insertAfter = false) {
+  const orderedIds = getIndicatorsForDestination(destinationId).map(ind => ind.id).filter(id => id !== draggedId);
+  if (!targetId) {
+    orderedIds.push(draggedId);
+    return orderedIds;
+  }
+
+  const targetIndex = orderedIds.indexOf(targetId);
+  if (targetIndex === -1) {
+    orderedIds.push(draggedId);
+    return orderedIds;
+  }
+
+  orderedIds.splice(insertAfter ? targetIndex + 1 : targetIndex, 0, draggedId);
+  return orderedIds;
+}
+
+async function persistIndicatorOrder(destinationId, orderedIds) {
+  const relevantDestinationId = destinationId === UNASSIGNED_DESTINATION_ID ? null : destinationId;
+  const orderMap = new Map(orderedIds.map((id, index) => [id, index]));
+
+  indicators = indicators.map(ind => {
+    if ((ind.destination_id || null) !== relevantDestinationId || !orderMap.has(ind.id)) return ind;
+    return { ...ind, sort_order: orderMap.get(ind.id) };
+  });
+
+  currentDestinationIndicators = currentDestination ? getIndicatorsForDestination(currentDestination.id) : [];
+  if (currentDestination?.id === destinationId) {
+    if (document.getElementById('destinationOverview').style.display !== 'none') {
+      showCurrentDestinationOverview();
+    } else {
+      renderSidebar();
+    }
+  } else {
+    renderSidebar();
+  }
+
+  try {
+    await updateIndicatorsSortOrder(relevantDestinationId, orderedIds);
+  } catch (error) {
+    toast('No pude guardar el nuevo orden: ' + error.message, 'error');
+    await loadCoreData({ keepSelection: true });
+  }
+}
+
+async function handleIndicatorDrop(event, targetIndicatorId, destinationId) {
+  if (!canHandleIndicatorDrop(destinationId)) return;
+  event.preventDefault();
+  const rect = event.currentTarget.getBoundingClientRect();
+  const insertAfter = event.clientY > rect.top + event.currentTarget.offsetHeight / 2;
+  const orderedIds = getReorderedIndicatorIds(destinationId, dragState.indicatorId, targetIndicatorId, insertAfter);
+  clearDragClasses();
+  await persistIndicatorOrder(destinationId, orderedIds);
+  dragState = { indicatorId: '', destinationId: '' };
+}
+
+async function handleIndicatorDropToEnd(event, destinationId) {
+  if (!canHandleIndicatorDrop(destinationId)) return;
+  event.preventDefault();
+  clearDragClasses();
+  const orderedIds = getReorderedIndicatorIds(destinationId, dragState.indicatorId);
+  await persistIndicatorOrder(destinationId, orderedIds);
+  dragState = { indicatorId: '', destinationId: '' };
 }
 
 function getUniqueMetricOptions() {
@@ -1148,6 +1308,11 @@ async function saveIndicator() {
     toast('Para recalcular por fórmula anual necesitás numerador y denominador.', 'error');
     return;
   }
+
+  const movingDestination = id && currentIndicator && (currentIndicator.destination_id || '') !== (payload.destination_id || '');
+  payload.sort_order = id
+    ? (movingDestination ? getNextSortOrderForDestination(payload.destination_id, id) : (currentIndicator?.sort_order ?? getNextSortOrderForDestination(payload.destination_id, id)))
+    : getNextSortOrderForDestination(payload.destination_id);
 
   try {
     if (id) {

@@ -126,7 +126,7 @@
           <p id="viewDesc" style="color:var(--text-muted);font-size:13px"></p>
         </div>
         <div class="topbar-actions">
-          <button class="btn btn-secondary btn-sm" onclick="showCurrentDestinationOverview()">← Volver al destino</button>
+          <button class="btn btn-secondary btn-sm" onclick="showCurrentDestinationOverview()">← Volver al árbol del destino</button>
           <button class="btn btn-secondary btn-sm" onclick="handleExcelExport()">⬇ Excel</button>
           <button class="btn btn-primary btn-sm" onclick="handlePdfExport()">⬇ PDF</button>
         </div>
@@ -237,6 +237,18 @@ let currentYearlyStats = {};
 let visibleYears = [];
 let comparisonSelection = { metricKey: '', destinationIds: [] };
 const groupCollapseState = { sidebar: {}, center: {} };
+const overviewScrollState = {};
+
+function getIndicatorSortOrder(indicator) {
+  const value = Number(indicator?.sort_order);
+  return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+}
+
+function compareIndicatorsForOrdering(a, b) {
+  const orderDiff = getIndicatorSortOrder(a) - getIndicatorSortOrder(b);
+  if (orderDiff !== 0) return orderDiff;
+  return (a?.name || '').localeCompare(b?.name || '', 'es');
+}
 
 window.addEventListener('DOMContentLoaded', initApp);
 
@@ -277,10 +289,11 @@ function getRenderableDestinations() {
 }
 
 function getIndicatorsForDestination(destinationId) {
-  if (destinationId === UNASSIGNED_DESTINATION_ID) {
-    return indicators.filter(ind => !ind.destination_id);
-  }
-  return indicators.filter(ind => ind.destination_id === destinationId);
+  const scoped = destinationId === UNASSIGNED_DESTINATION_ID
+    ? indicators.filter(ind => !ind.destination_id)
+    : indicators.filter(ind => ind.destination_id === destinationId);
+
+  return [...scoped].sort(compareIndicatorsForOrdering);
 }
 
 function getDestinationById(destinationId) {
@@ -292,8 +305,9 @@ function getIndicatorGroupTitle(indicator) {
 }
 
 function groupIndicatorsByTitle(items) {
+  const orderedItems = [...items].sort(compareIndicatorsForOrdering);
   const groups = new Map();
-  items.forEach(indicator => {
+  orderedItems.forEach(indicator => {
     const title = getIndicatorGroupTitle(indicator);
     if (!groups.has(title)) groups.set(title, []);
     groups.get(title).push(indicator);
@@ -302,9 +316,11 @@ function groupIndicatorsByTitle(items) {
   return [...groups.entries()]
     .map(([title, indicators]) => ({
       title,
-      indicators: [...indicators].sort((a, b) => a.name.localeCompare(b.name, 'es'))
+      indicators,
+      sortRank: Math.min(...indicators.map(getIndicatorSortOrder)),
     }))
     .sort((a, b) => {
+      if (a.sortRank !== b.sortRank) return a.sortRank - b.sortRank;
       if (a.title === 'Sin agrupar' && b.title !== 'Sin agrupar') return 1;
       if (b.title === 'Sin agrupar' && a.title !== 'Sin agrupar') return -1;
       return a.title.localeCompare(b.title, 'es');
@@ -484,12 +500,13 @@ async function selectDestination(destinationId) {
     destroyCharts();
   }
 
+  overviewScrollState[currentDestination.id] = 0;
   await hydrateDestinationDataStatus(destinationId);
   renderSidebar();
-  showCurrentDestinationOverview();
+  showCurrentDestinationOverview({ restoreScroll: false });
 }
 
-function showCurrentDestinationOverview() {
+function showCurrentDestinationOverview({ restoreScroll = true } = {}) {
   if (!currentDestination) {
     showEmptyState();
     return;
@@ -524,11 +541,24 @@ function showCurrentDestinationOverview() {
   document.getElementById('mainEmpty').style.display = 'none';
   document.getElementById('mainView').style.display = 'none';
   document.getElementById('destinationOverview').style.display = 'block';
+
+  const mainContent = document.querySelector('.main-content');
+  if (mainContent) {
+    const targetScroll = restoreScroll ? (overviewScrollState[currentDestination.id] || 0) : 0;
+    requestAnimationFrame(() => {
+      mainContent.scrollTo({ top: targetScroll, behavior: 'auto' });
+    });
+  }
 }
 
 async function selectIndicator(id) {
   currentIndicator = indicators.find(i => i.id === id);
   if (!currentIndicator) return;
+
+  const mainContent = document.querySelector('.main-content');
+  if (currentDestination?.id && mainContent) {
+    overviewScrollState[currentDestination.id] = mainContent.scrollTop;
+  }
 
   const destinationId = currentIndicator.destination_id || UNASSIGNED_DESTINATION_ID;
   ensureIndicatorGroupExpanded(currentIndicator, destinationId);

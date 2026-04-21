@@ -83,6 +83,7 @@ function normalizeIndicatorRow(item) {
     formula_denominator_key: item.formula_denominator_key || '',
     formula_multiplier: item.formula_multiplier === null || item.formula_multiplier === undefined ? 1 : Number(item.formula_multiplier),
     group_title: item.group_title || '',
+    sort_order: item.sort_order === null || item.sort_order === undefined ? 0 : Number(item.sort_order),
     destination: item.destinations || null,
   };
 }
@@ -91,6 +92,8 @@ async function fetchIndicators() {
   const { data, error } = await getSupabase()
     .from('indicators')
     .select('*, destinations(id, name, slug)')
+    .order('destination_id', { ascending: true, nullsFirst: true })
+    .order('sort_order', { ascending: true, nullsFirst: true })
     .order('name', { ascending: true });
   if (error) throw error;
   return (data || []).map(normalizeIndicatorRow);
@@ -111,6 +114,7 @@ async function createIndicator(payload) {
       formula_denominator_key: payload.formula_denominator_key || null,
       formula_multiplier: payload.formula_multiplier === '' || payload.formula_multiplier === null || payload.formula_multiplier === undefined ? 1 : Number(payload.formula_multiplier),
       group_title: payload.group_title || '',
+      sort_order: payload.sort_order === '' || payload.sort_order === null || payload.sort_order === undefined ? 0 : Number(payload.sort_order),
     })
     .select('*, destinations(id, name, slug)')
     .single();
@@ -138,6 +142,11 @@ async function updateIndicator(id, fields) {
   if (Object.prototype.hasOwnProperty.call(payload, 'group_title')) {
     payload.group_title = (payload.group_title || '').trim();
   }
+  if (Object.prototype.hasOwnProperty.call(payload, 'sort_order')) {
+    payload.sort_order = payload.sort_order === '' || payload.sort_order === null || payload.sort_order === undefined
+      ? 0
+      : Number(payload.sort_order);
+  }
   const { error } = await getSupabase()
     .from('indicators')
     .update(payload)
@@ -150,6 +159,23 @@ async function deleteIndicator(id) {
     .from('indicators')
     .delete()
     .eq('id', id);
+  if (error) throw error;
+}
+
+async function updateIndicatorsSortOrder(destinationId, orderedIds) {
+  const uniqueIds = [...new Set((orderedIds || []).filter(Boolean))];
+  if (!uniqueIds.length) return;
+
+  const updates = uniqueIds.map((id, index) => ({
+    id,
+    sort_order: index,
+    updated_at: new Date().toISOString(),
+  }));
+
+  const { error } = await getSupabase()
+    .from('indicators')
+    .upsert(updates, { onConflict: 'id' });
+
   if (error) throw error;
 }
 

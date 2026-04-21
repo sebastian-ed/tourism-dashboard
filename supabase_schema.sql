@@ -41,7 +41,8 @@ ALTER TABLE indicators
   ADD COLUMN IF NOT EXISTS formula_numerator_key TEXT,
   ADD COLUMN IF NOT EXISTS formula_denominator_key TEXT,
   ADD COLUMN IF NOT EXISTS formula_multiplier NUMERIC DEFAULT 1,
-  ADD COLUMN IF NOT EXISTS group_title TEXT DEFAULT '';
+  ADD COLUMN IF NOT EXISTS group_title TEXT DEFAULT '',
+  ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
 
 UPDATE indicators
 SET destination_id = (SELECT id FROM destinations WHERE slug = 'general' LIMIT 1)
@@ -67,9 +68,20 @@ UPDATE indicators
 SET group_title = ''
 WHERE group_title IS NULL;
 
+WITH ordered AS (
+  SELECT id, ROW_NUMBER() OVER (PARTITION BY destination_id ORDER BY COALESCE(sort_order, 2147483647), NULLIF(group_title, ''), name, created_at, id) - 1 AS rn
+  FROM indicators
+)
+UPDATE indicators i
+SET sort_order = ordered.rn
+FROM ordered
+WHERE i.id = ordered.id
+  AND (i.sort_order IS NULL OR i.sort_order <> ordered.rn);
+
 CREATE INDEX IF NOT EXISTS idx_indicators_destination ON indicators(destination_id);
 CREATE INDEX IF NOT EXISTS idx_indicators_name ON indicators(name);
 CREATE INDEX IF NOT EXISTS idx_indicators_metric_key ON indicators(metric_key);
+CREATE INDEX IF NOT EXISTS idx_indicators_sort_order ON indicators(destination_id, sort_order, name);
 
 -- ── DATA POINTS ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS data_points (
