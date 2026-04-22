@@ -187,6 +187,30 @@ function buildDataByYear(dataPoints) {
   return byYear;
 }
 
+function buildDataPointMetaByYear(dataPoints) {
+  const byYear = {};
+  (dataPoints || []).forEach(dp => {
+    if (!byYear[dp.year]) byYear[dp.year] = new Array(12).fill(null);
+    const isProvisional = dp?.is_provisional === true;
+    const observation = String(dp?.observation || '').trim();
+    byYear[dp.year][dp.month - 1] = (isProvisional || observation) ? { isProvisional, observation } : null;
+  });
+  return byYear;
+}
+
+function hasDataPointAnnotation(meta) {
+  return Boolean(meta && (meta.isProvisional || String(meta.observation || '').trim()));
+}
+
+function getDataPointAnnotationText(meta) {
+  if (!meta) return '';
+  const parts = [];
+  if (meta.isProvisional) parts.push('Dato provisorio');
+  const observation = String(meta.observation || '').trim();
+  if (observation) parts.push(observation);
+  return parts.join(' · ');
+}
+
 function buildDataByIndicator(points) {
   const map = {};
   (points || []).forEach(dp => {

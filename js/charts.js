@@ -34,7 +34,7 @@ function buildLineDatasets(dataByYear, years) {
   });
 }
 
-function renderLineChart(canvasId, dataByYear, indicator) {
+function renderLineChart(canvasId, dataByYear, indicator, dataMetaByYear = {}) {
   const ctx = document.getElementById(canvasId);
   if (!ctx) return;
   if (lineChartInstance) lineChartInstance.destroy();
@@ -67,6 +67,12 @@ function renderLineChart(canvasId, dataByYear, indicator) {
           bodyColor: '#94a3b8',
           callbacks: {
             label: (ctx) => ` ${ctx.dataset.label}: ${formatNumber(ctx.parsed.y)} ${indicator.unit || ''}`,
+            afterLabel: (ctx) => {
+              const year = Number(ctx.dataset.label);
+              const meta = dataMetaByYear?.[year]?.[ctx.dataIndex] || null;
+              const annotation = getDataPointAnnotationText(meta);
+              return annotation ? ` * ${annotation}` : '';
+            },
           }
         },
       },

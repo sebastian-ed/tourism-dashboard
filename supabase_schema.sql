@@ -95,9 +95,23 @@ CREATE TABLE IF NOT EXISTS data_points (
   year INTEGER NOT NULL,
   month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
   value NUMERIC,
+  is_provisional BOOLEAN DEFAULT FALSE,
+  observation TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(indicator_id, year, month)
 );
+
+ALTER TABLE data_points
+  ADD COLUMN IF NOT EXISTS is_provisional BOOLEAN DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS observation TEXT DEFAULT '';
+
+UPDATE data_points
+SET is_provisional = FALSE
+WHERE is_provisional IS NULL;
+
+UPDATE data_points
+SET observation = ''
+WHERE observation IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_data_points_indicator ON data_points(indicator_id);
 CREATE INDEX IF NOT EXISTS idx_data_points_year ON data_points(year);

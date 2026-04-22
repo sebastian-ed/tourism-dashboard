@@ -7,13 +7,16 @@ let currentDestination = null;
 let currentIndicator = null;
 let currentDataPoints = [];
 let currentDataByYear = {};
+let currentDataMetaByYear = {};
 let currentYearlyStats = {};
 let currentRelatedSeriesMap = {};
 let currentDestinationIndicators = [];
 let currentDataByIndicator = {};
 let gridYears = [];
 let gridData = {};
+let gridMeta = {};
 let selectedGridYears = [];
+let selectedGridCell = null;
 let comparisonSelection = { metricKey: '', destinationIds: [] };
 const groupCollapseState = { sidebar: {}, center: {} };
 let dragState = { indicatorId: '', destinationId: '' };
@@ -623,6 +626,7 @@ async function selectIndicator(id, { silent = false } = {}) {
     if (indicatorRef) indicatorRef.has_data = currentIndicator.has_data;
     renderSidebar();
     currentDataByYear = buildDataByYear(currentDataPoints);
+    currentDataMetaByYear = buildDataPointMetaByYear(currentDataPoints);
     currentRelatedSeriesMap = buildRelatedSeriesMapForDestination(currentIndicator, currentDestinationIndicators, currentDataByIndicator);
     currentYearlyStats = calcYearlyStats(currentDataByYear, {
       indicator: currentIndicator,
@@ -685,7 +689,7 @@ function renderDashboard() {
   `).join('');
 
   destroyCharts();
-  renderLineChart('lineChart', currentDataByYear, currentIndicator);
+  renderLineChart('lineChart', currentDataByYear, currentIndicator, currentDataMetaByYear);
 
   const annualChartCard = document.getElementById('annualChartCard');
   if (currentIndicator.annual_chart_visible === false || getIndicatorCalcMode(currentIndicator) === 'none') {
@@ -716,7 +720,7 @@ function renderDashboard() {
   const rows = MONTHS.map((m, mi) => `
     <tr>
       <td>${m}</td>
-      ${years.map(yr => `<td>${formatNumber(currentDataByYear[yr]?.[mi])}</td>`).join('')}
+      ${years.map(yr => renderMonthlyDataCell(currentDataByYear[yr]?.[mi], currentDataMetaByYear?.[yr]?.[mi])).join('')}
     </tr>
   `).join('');
   mt.innerHTML = header + `<tbody>${rows}</tbody>`;
@@ -1067,13 +1071,16 @@ function openDataModal() {
   const years = Object.keys(currentDataByYear).map(Number).sort((a, b) => a - b);
   gridYears = [...years];
   gridData = {};
+  gridMeta = {};
   gridYears.forEach(yr => {
     gridData[yr] = currentDataByYear[yr] ? [...currentDataByYear[yr]] : new Array(12).fill(null);
+    gridMeta[yr] = currentDataMetaByYear[yr] ? currentDataMetaByYear[yr].map(meta => meta ? { ...meta } : null) : new Array(12).fill(null);
   });
   document.getElementById('pasteArea').value = '';
   document.getElementById('pasteArea').style.borderColor = '';
   document.getElementById('pasteYear').value = years.length ? years[years.length - 1] : '';
   selectedGridYears = [];
+  selectedGridCell = null;
   renderGrid();
   document.getElementById('dataModal').classList.add('open');
 }
@@ -1087,6 +1094,7 @@ function renderGrid() {
   if (!gridYears.length) {
     grid.innerHTML = '<div class="sidebar-hint" style="grid-column:1/-1;padding:16px 0">No hay años cargados todavía. Escribí un año y agregalo.</div>';
     renderYearDeleteList();
+    syncSelectedCellPanel();
     return;
   }
 
@@ -1094,15 +1102,108 @@ function renderGrid() {
   gridYears.forEach(yr => {
     html += `<div class="month-grid-row">
       <div class="year-label">${yr}</div>
-      ${new Array(12).fill(0).map((_, mi) => `
-        <input class="month-cell" type="text" inputmode="decimal" id="cell_${yr}_${mi}" value="${gridData[yr]?.[mi] ?? ''}"
-          onchange="gridData[${yr}][${mi}] = normalizeNumericValue(this.value); this.value = gridData[${yr}][${mi}] ?? ''"
-          onkeydown="cellNav(event, ${yr}, ${mi})"/>
-      `).join('')}
+      ${new Array(12).fill(0).map((_, mi) => {
+        const meta = gridMeta?.[yr]?.[mi] || null;
+        const hasAnnotation = hasDataPointAnnotation(meta);
+        const selected = selectedGridCell?.year === yr && selectedGridCell?.monthIndex === mi;
+        const rawValue = gridData[yr]?.[mi];
+        const displayValue = rawValue === null || rawValue === undefined ? '' : rawValue;
+        return `
+        <div class="month-cell-wrap ${hasAnnotation ? 'has-note' : ''} ${selected ? 'is-selected' : ''}" data-year="${yr}" data-month="${mi}" onclick="selectGridCell(${yr}, ${mi}, false)">
+          <input class="month-cell" type="text" inputmode="decimal" id="cell_${yr}_${mi}" value="${displayValue}"
+            onchange="handleGridCellChange(${yr}, ${mi}, this.value)"
+            onclick="event.stopPropagation(); selectGridCell(${yr}, ${mi}, false)"
+            onfocus="selectGridCell(${yr}, ${mi}, false)"
+            onkeydown="cellNav(event, ${yr}, ${mi})"/>
+          ${hasAnnotation ? `<button type="button" class="month-cell-note-marker" title="${escapeHtml(getDataPointAnnotationText(meta))}" onclick="event.stopPropagation(); selectGridCell(${yr}, ${mi})">*</button>` : ''}
+        </div>`;
+      }).join('')}
     </div>`;
   });
   grid.innerHTML = html;
   renderYearDeleteList();
+  syncSelectedCellPanel();
+}
+
+function handleGridCellChange(year, monthIndex, rawValue) {
+  gridData[year][monthIndex] = normalizeNumericValue(rawValue);
+  const cell = document.getElementById(`cell_${year}_${monthIndex}`);
+  if (cell) cell.value = gridData[year][monthIndex] ?? '';
+  if (selectedGridCell?.year === year && selectedGridCell?.monthIndex === monthIndex) {
+    syncSelectedCellPanel();
+  }
+}
+
+function updateGridSelectionStyles() {
+  document.querySelectorAll('.month-cell-wrap').forEach(node => {
+    const year = Number(node.dataset.year);
+    const monthIndex = Number(node.dataset.month);
+    const active = selectedGridCell?.year === year && selectedGridCell?.monthIndex === monthIndex;
+    node.classList.toggle('is-selected', active);
+  });
+}
+
+function selectGridCell(year, monthIndex, rerender = false) {
+  selectedGridCell = { year, monthIndex };
+  syncSelectedCellPanel();
+  if (rerender) {
+    renderGrid();
+  } else {
+    updateGridSelectionStyles();
+  }
+}
+
+function syncSelectedCellPanel() {
+  const target = document.getElementById('cellNoteTarget');
+  const checkbox = document.getElementById('cellNoteProvisional');
+  const textarea = document.getElementById('cellNoteObservation');
+  if (!target || !checkbox || !textarea) return;
+
+  if (!selectedGridCell) {
+    target.textContent = 'Sin celda seleccionada';
+    checkbox.checked = false;
+    textarea.value = '';
+    checkbox.disabled = true;
+    textarea.disabled = true;
+    return;
+  }
+
+  const { year, monthIndex } = selectedGridCell;
+  const meta = gridMeta?.[year]?.[monthIndex] || null;
+  target.textContent = `${MONTHS[monthIndex]} ${year}`;
+  checkbox.disabled = false;
+  textarea.disabled = false;
+  checkbox.checked = Boolean(meta?.isProvisional);
+  textarea.value = String(meta?.observation || '');
+}
+
+function applySelectedCellMeta() {
+  if (!selectedGridCell) return;
+  const { year, monthIndex } = selectedGridCell;
+  const checkbox = document.getElementById('cellNoteProvisional');
+  const textarea = document.getElementById('cellNoteObservation');
+  const nextMeta = {
+    isProvisional: checkbox?.checked === true,
+    observation: String(textarea?.value || '').trim(),
+  };
+  if (!gridMeta[year]) gridMeta[year] = new Array(12).fill(null);
+  gridMeta[year][monthIndex] = hasDataPointAnnotation(nextMeta) ? nextMeta : null;
+  renderGrid();
+}
+
+function clearSelectedCellMeta() {
+  if (!selectedGridCell) return;
+  const { year, monthIndex } = selectedGridCell;
+  if (!gridMeta[year]) gridMeta[year] = new Array(12).fill(null);
+  gridMeta[year][monthIndex] = null;
+  syncSelectedCellPanel();
+  renderGrid();
+}
+
+function renderMonthlyDataCell(value, meta) {
+  const title = getDataPointAnnotationText(meta);
+  const suffix = hasDataPointAnnotation(meta) ? '<span class="data-point-flag" aria-hidden="true">*</span>' : '';
+  return `<td ${title ? `title="${escapeHtml(title)}"` : ''}>${formatNumber(value)}${suffix}</td>`;
 }
 
 function cellNav(event, yr, mi) {
@@ -1131,6 +1232,7 @@ function addYearRow() {
   gridYears.push(year);
   gridYears.sort((a, b) => a - b);
   gridData[year] = new Array(12).fill(null);
+  gridMeta[year] = new Array(12).fill(null);
   renderGrid();
 }
 
@@ -1138,7 +1240,9 @@ function removeLastYear() {
   if (!gridYears.length) return;
   const removed = gridYears.pop();
   delete gridData[removed];
+  delete gridMeta[removed];
   selectedGridYears = selectedGridYears.filter(year => year !== removed);
+  if (selectedGridCell?.year === removed) selectedGridCell = null;
   renderGrid();
 }
 
@@ -1179,8 +1283,11 @@ function removeSelectedYears() {
   yearsToRemove.forEach(year => {
     gridYears = gridYears.filter(item => item !== year);
     delete gridData[year];
+    delete gridMeta[year];
+    if (selectedGridCell?.year === year) selectedGridCell = null;
   });
   selectedGridYears = [];
+  selectedGridCell = null;
   renderGrid();
   toast(`Se quitaron ${yearsToRemove.length} año${yearsToRemove.length !== 1 ? 's' : ''} de la grilla. Guardá para confirmar el cambio.`, 'success');
 }
@@ -1271,7 +1378,9 @@ function applyPaste() {
     gridYears.push(year);
     gridYears.sort((a, b) => a - b);
     gridData[year] = new Array(12).fill(null);
+    gridMeta[year] = new Array(12).fill(null);
   }
+  if (!gridMeta[year]) gridMeta[year] = new Array(12).fill(null);
 
   values.slice(0, 12).forEach((v, i) => {
     const num = normalizeNumericValue(v);
@@ -1301,8 +1410,16 @@ async function saveData() {
         cell.value = val ?? '';
         gridData[yr][mi] = val;
       }
+      const meta = gridMeta?.[yr]?.[mi] || null;
       if (val !== null) {
-        points.push({ indicator_id: currentIndicator.id, year: yr, month: mi + 1, value: val });
+        points.push({
+          indicator_id: currentIndicator.id,
+          year: yr,
+          month: mi + 1,
+          value: val,
+          is_provisional: meta?.isProvisional === true,
+          observation: String(meta?.observation || '').trim(),
+        });
       }
     }
   });
@@ -1316,6 +1433,7 @@ async function saveData() {
     }
 
     const verifiedPoints = await fetchDataPoints(currentIndicator.id);
+    currentDataMetaByYear = buildDataPointMetaByYear(verifiedPoints);
     if (points.length > 0 && verifiedPoints.length === 0) {
       throw new Error('Supabase respondió sin error, pero no devolvió datos persistidos. Reintentá la carga.');
     }

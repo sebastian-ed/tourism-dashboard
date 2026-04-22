@@ -220,9 +220,15 @@ async function fetchDataPointsForIndicators(indicatorIds) {
 }
 
 async function upsertDataPoints(points) {
+  const payload = (points || []).map(point => ({
+    ...point,
+    is_provisional: point?.is_provisional === true,
+    observation: String(point?.observation || '').trim(),
+  }));
+
   const { error } = await getSupabase()
     .from('data_points')
-    .upsert(points, { onConflict: 'indicator_id,year,month' });
+    .upsert(payload, { onConflict: 'indicator_id,year,month' });
   if (error) throw error;
 }
 

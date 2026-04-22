@@ -1060,3 +1060,77 @@ input, select, textarea { font-family: inherit; }
   .year-filter-card { padding: 16px; }
   .year-filter-header { flex-direction: column; }
 }
+
+
+.table-card-note {
+  padding: 0 20px 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.data-point-flag {
+  color: var(--accent-2);
+  font-weight: 800;
+  margin-left: 4px;
+}
+
+.month-cell-wrap {
+  position: relative;
+}
+
+.month-cell-wrap.is-selected .month-cell {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.month-cell-wrap.has-note .month-cell {
+  padding-right: 18px;
+}
+
+.month-cell-note-marker {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--accent-2);
+  font-weight: 800;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+}
+
+.cell-note-panel {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  background: rgba(15, 23, 42, .45);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.cell-note-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.cell-note-panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.checkbox-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-subtle);
+  font-size: 13px;
+}
+
+.checkbox-inline input {
+  accent-color: var(--accent);
+}

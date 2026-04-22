@@ -6,6 +6,7 @@ let indicators = [];
 let currentDestination = null;
 let currentIndicator = null;
 let currentDataByYear = {};
+let currentDataMetaByYear = {};
 let currentYearlyStats = {};
 let visibleYears = [];
 let comparisonSelection = { metricKey: '', destinationIds: [] };
@@ -366,6 +367,7 @@ async function selectIndicator(id) {
     if (indicatorRef) indicatorRef.has_data = currentIndicator.has_data;
     renderSidebar();
     currentDataByYear = buildDataByYear(currentPoints);
+    currentDataMetaByYear = buildDataPointMetaByYear(currentPoints);
     const relatedSeriesMap = buildRelatedSeriesMapForDestination(currentIndicator, destinationIndicators, dataByIndicator);
     currentYearlyStats = calcYearlyStats(currentDataByYear, { indicator: currentIndicator, relatedSeriesMap });
     visibleYears = getAvailableYears();
@@ -438,7 +440,8 @@ function renderDashboard() {
   document.getElementById('lineChartEmpty').style.display = hasVisibleYears ? 'none' : 'flex';
   document.getElementById('lineChartWrap').style.display = hasVisibleYears ? 'block' : 'none';
   if (hasVisibleYears) {
-    renderLineChart('lineChart', filteredDataByYear, currentIndicator);
+    const filteredMetaByYear = Object.fromEntries(shownYears.map(year => [year, currentDataMetaByYear?.[year] || new Array(12).fill(null)]));
+    renderLineChart('lineChart', filteredDataByYear, currentIndicator, filteredMetaByYear);
   }
 
   const annualChartCard = document.getElementById('annualChartCard');
@@ -474,12 +477,18 @@ function renderDashboard() {
   const rows = MONTHS.map((m, mi) => `
     <tr>
       <td>${m}</td>
-      ${years.map(yr => `<td>${formatNumber(currentDataByYear[yr]?.[mi])}</td>`).join('')}
+      ${years.map(yr => renderMonthlyDataCell(currentDataByYear[yr]?.[mi], currentDataMetaByYear?.[yr]?.[mi])).join('')}
     </tr>
   `).join('');
   mt.innerHTML = header + `<tbody>${rows}</tbody>`;
 }
 
+
+function renderMonthlyDataCell(value, meta) {
+  const title = getDataPointAnnotationText(meta);
+  const suffix = hasDataPointAnnotation(meta) ? '<span class="data-point-flag" aria-hidden="true">*</span>' : '';
+  return `<td ${title ? `title="${escapeHtml(title)}"` : ''}>${formatNumber(value)}${suffix}</td>`;
+}
 
 function getAvailableYears() {
   return Object.keys(currentDataByYear).map(Number).sort((a, b) => a - b);

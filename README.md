@@ -92,3 +92,12 @@ Podés cargar una **aclaración metodológica** en el panel admin, por ejemplo:
 
 La app la muestra en admin, en la vista pública y también la incorpora en las exportaciones.
 
+
+
+## ✳️ Observaciones puntuales por dato
+
+Ahora cada dato mensual puede marcarse como **provisorio** y/o llevar una **observación libre**.
+
+- Se configura desde el modal **Cargar datos**, seleccionando una celda puntual.
+- En las tablas se muestra con un **asterisco (")** junto al valor.
+- Al pasar el mouse sobre el valor se ve el detalle de la observación.
