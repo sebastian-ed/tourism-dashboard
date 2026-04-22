@@ -26,6 +26,7 @@ async function exportToExcel(indicator, dataByYear, yearlyStats) {
   rows.push(['Indicador', indicator.name]);
   rows.push(['Unidad', indicator.unit || '']);
   rows.push(['Cálculo anual', annualMeta.label]);
+  if (getMethodologyNote(indicator)) rows.push(['Aclaración metodológica', getMethodologyNote(indicator)]);
   rows.push([]);
   rows.push(header);
 
@@ -90,7 +91,16 @@ async function exportToPDF(indicator, dataByYear, yearlyStats) {
 
   doc.setFontSize(9);
   doc.setTextColor(100, 116, 139);
-  doc.text(`Generado: ${now}  ·  Unidad: ${indicator.unit || 'N/A'}  ·  Cálculo anual: ${annualMeta.label}`, 14, destinationName ? 58 : 52);
+  const metaY = destinationName ? 58 : 52;
+  doc.text(`Generado: ${now}  ·  Unidad: ${indicator.unit || 'N/A'}  ·  Cálculo anual: ${annualMeta.label}`, 14, metaY);
+
+  const methodologyNote = getMethodologyNote(indicator);
+  if (methodologyNote) {
+    doc.setFontSize(9);
+    doc.setTextColor(249, 115, 22);
+    const noteLines = doc.splitTextToSize(`Aclaración metodológica: ${methodologyNote}`, 269);
+    doc.text(noteLines, 14, metaY + 8);
+  }
 
   const allVals = Object.values(dataByYear).flat().filter(v => v !== null && !isNaN(v));
   const globalStats = calcStats(allVals);
@@ -102,7 +112,7 @@ async function exportToPDF(indicator, dataByYear, yearlyStats) {
     { label: 'Mínimo histórico', value: formatNumber(globalStats?.min) },
     { label: 'Años cargados', value: String(years.length) },
   ];
-  const kpiY = destinationName ? 66 : 60;
+  const kpiY = methodologyNote ? (destinationName ? 78 : 72) : (destinationName ? 66 : 60);
   kpis.forEach((kpi, i) => {
     const x = 14 + i * 68;
     doc.setFillColor(30, 41, 59);

@@ -73,6 +73,10 @@ async function deleteDestination(id) {
 }
 
 // ── INDICATORS ─────────────────────────────────────────────
+function getMethodologyNote(indicator) {
+  return String(indicator?.methodology_note || '').trim();
+}
+
 function normalizeIndicatorRow(item) {
   return {
     ...item,
@@ -84,6 +88,7 @@ function normalizeIndicatorRow(item) {
     formula_multiplier: item.formula_multiplier === null || item.formula_multiplier === undefined ? 1 : Number(item.formula_multiplier),
     group_title: item.group_title || '',
     sort_order: item.sort_order === null || item.sort_order === undefined ? 0 : Number(item.sort_order),
+    methodology_note: getMethodologyNote(item),
     destination: item.destinations || null,
   };
 }
@@ -115,6 +120,7 @@ async function createIndicator(payload) {
       formula_multiplier: payload.formula_multiplier === '' || payload.formula_multiplier === null || payload.formula_multiplier === undefined ? 1 : Number(payload.formula_multiplier),
       group_title: payload.group_title || '',
       sort_order: payload.sort_order === '' || payload.sort_order === null || payload.sort_order === undefined ? 0 : Number(payload.sort_order),
+      methodology_note: (payload.methodology_note || '').trim(),
     })
     .select('*, destinations(id, name, slug)')
     .single();
@@ -146,6 +152,9 @@ async function updateIndicator(id, fields) {
     payload.sort_order = payload.sort_order === '' || payload.sort_order === null || payload.sort_order === undefined
       ? 0
       : Number(payload.sort_order);
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'methodology_note')) {
+    payload.methodology_note = (payload.methodology_note || '').trim();
   }
   const { error } = await getSupabase()
     .from('indicators')

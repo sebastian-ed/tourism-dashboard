@@ -42,7 +42,8 @@ ALTER TABLE indicators
   ADD COLUMN IF NOT EXISTS formula_denominator_key TEXT,
   ADD COLUMN IF NOT EXISTS formula_multiplier NUMERIC DEFAULT 1,
   ADD COLUMN IF NOT EXISTS group_title TEXT DEFAULT '',
-  ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS methodology_note TEXT DEFAULT '';
 
 UPDATE indicators
 SET destination_id = (SELECT id FROM destinations WHERE slug = 'general' LIMIT 1)
@@ -67,6 +68,10 @@ WHERE formula_multiplier IS NULL;
 UPDATE indicators
 SET group_title = ''
 WHERE group_title IS NULL;
+
+UPDATE indicators
+SET methodology_note = ''
+WHERE methodology_note IS NULL;
 
 WITH ordered AS (
   SELECT id, ROW_NUMBER() OVER (PARTITION BY destination_id ORDER BY COALESCE(sort_order, 2147483647), NULLIF(group_title, ''), name, created_at, id) - 1 AS rn

@@ -79,3 +79,16 @@ Así el comparador puede tomar el mismo indicador y enfrentarlo entre destinos.
 - estado de datos con color en las tarjetas de indicadores
 
 **Importante:** si ya tenías el proyecto en producción, ejecutá nuevamente `supabase_schema.sql` para agregar la columna `group_title` en `indicators`.
+
+
+## 📝 Aclaración metodológica por indicador
+
+Si un mismo indicador cambia de rotulado, unidad o aclaración entre períodos, no hace falta duplicarlo.
+
+Podés cargar una **aclaración metodológica** en el panel admin, por ejemplo:
+
+- `Hasta 2019: días`
+- `Desde 2020: noches`
+
+La app la muestra en admin, en la vista pública y también la incorpora en las exportaciones.
+
