@@ -90,6 +90,10 @@ async function loadCoreData({ keepSelection = true } = {}) {
   currentDestination = renderableDestinations.find(d => d.id === previousDestinationId) || renderableDestinations[0] || null;
   currentIndicator = indicators.find(i => i.id === previousIndicatorId) || null;
 
+  if (currentDestination) {
+    await hydrateDestinationDataStatus(currentDestination.id);
+  }
+
   renderSidebar();
   renderComparisonControls();
 
@@ -116,6 +120,21 @@ function getDestinationById(destinationId) {
 
 function getIndicatorGroupTitle(indicator) {
   return (indicator?.group_title || '').trim() || 'Sin agrupar';
+}
+
+
+function applyPresenceToIndicators(indicatorIds, presence) {
+  const idSet = new Set((indicatorIds || []).filter(Boolean));
+  indicators.forEach(ind => {
+    if (idSet.has(ind.id)) ind.has_data = presence.has(ind.id);
+  });
+  if (currentIndicator && idSet.has(currentIndicator.id)) {
+    currentIndicator.has_data = presence.has(currentIndicator.id);
+  }
+}
+
+function buildPresenceFromPoints(points) {
+  return new Set((points || []).map(point => point.indicator_id).filter(Boolean));
 }
 
 function groupIndicatorsByTitle(items) {
@@ -530,12 +549,16 @@ async function hydrateDestinationDataStatus(destinationId) {
   const ids = destinationIndicators.map(ind => ind.id);
   if (!ids.length) return;
   try {
-    const presence = await fetchIndicatorsWithData(ids);
-    indicators.forEach(ind => {
-      if (ids.includes(ind.id)) ind.has_data = presence.has(ind.id);
-    });
+    const points = await fetchDataPointsForIndicators(ids);
+    const presence = buildPresenceFromPoints(points);
+    applyPresenceToIndicators(ids, presence);
   } catch (e) {
-    // la administración sigue operativa aunque falle esta capa visual
+    try {
+      const presence = await fetchIndicatorsWithData(ids);
+      applyPresenceToIndicators(ids, presence);
+    } catch (_) {
+      // la administración sigue operativa aunque falle esta capa visual
+    }
   }
 }
 
@@ -543,15 +566,16 @@ async function refreshIndicatorsDataStatus(indicatorIds) {
   const ids = [...new Set((indicatorIds || []).filter(Boolean))];
   if (!ids.length) return;
   try {
-    const presence = await fetchIndicatorsWithData(ids);
-    indicators.forEach(ind => {
-      if (ids.includes(ind.id)) ind.has_data = presence.has(ind.id);
-    });
-    if (currentIndicator && ids.includes(currentIndicator.id)) {
-      currentIndicator.has_data = presence.has(currentIndicator.id);
-    }
+    const points = await fetchDataPointsForIndicators(ids);
+    const presence = buildPresenceFromPoints(points);
+    applyPresenceToIndicators(ids, presence);
   } catch (e) {
-    // no rompo la UI por una capa visual
+    try {
+      const presence = await fetchIndicatorsWithData(ids);
+      applyPresenceToIndicators(ids, presence);
+    } catch (_) {
+      // no rompo la UI por una capa visual
+    }
   }
 }
 
@@ -620,10 +644,10 @@ async function selectIndicator(id, { silent = false } = {}) {
     const destinationIds = currentDestinationIndicators.map(ind => ind.id);
     const allPoints = await fetchDataPointsForIndicators(destinationIds);
     currentDataByIndicator = buildDataByIndicator(allPoints);
+    const presence = buildPresenceFromPoints(allPoints);
+    applyPresenceToIndicators(destinationIds, presence);
     currentDataPoints = currentDataByIndicator[currentIndicator.id] || [];
     currentIndicator.has_data = currentDataPoints.length > 0;
-    const indicatorRef = indicators.find(ind => ind.id === currentIndicator.id);
-    if (indicatorRef) indicatorRef.has_data = currentIndicator.has_data;
     renderSidebar();
     currentDataByYear = buildDataByYear(currentDataPoints);
     currentDataMetaByYear = buildDataPointMetaByYear(currentDataPoints);
@@ -1439,6 +1463,8 @@ async function saveData() {
     }
 
     await refreshIndicatorsDataStatus([currentIndicator.id]);
+    const destinationId = currentIndicator.destination_id || UNASSIGNED_DESTINATION_ID;
+    await hydrateDestinationDataStatus(destinationId);
     closeDataModal();
     await selectIndicator(currentIndicator.id, { silent: true });
     renderSidebar();
