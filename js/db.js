@@ -1,6 +1,26 @@
 // Supabase client
 let supabaseClient = null;
 
+
+const SUPABASE_PAGE_SIZE = 1000;
+
+async function fetchAllPagedRows(buildPageQuery) {
+  let from = 0;
+  const rows = [];
+
+  while (true) {
+    const to = from + SUPABASE_PAGE_SIZE - 1;
+    const { data, error } = await buildPageQuery(from, to);
+    if (error) throw error;
+    const page = data || [];
+    rows.push(...page);
+    if (page.length < SUPABASE_PAGE_SIZE) break;
+    from += SUPABASE_PAGE_SIZE;
+  }
+
+  return rows;
+}
+
 function getSupabase() {
   if (!supabaseClient) {
     supabaseClient = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
@@ -194,29 +214,31 @@ async function updateIndicatorsSortOrder(destinationId, orderedIds) {
 
 // ── DATA POINTS ─────────────────────────────────────────────
 async function fetchDataPoints(indicatorId) {
-  const { data, error } = await getSupabase()
-    .from('data_points')
-    .select('*')
-    .eq('indicator_id', indicatorId)
-    .order('year', { ascending: true })
-    .order('month', { ascending: true });
-  if (error) throw error;
-  return data || [];
+  return fetchAllPagedRows((from, to) =>
+    getSupabase()
+      .from('data_points')
+      .select('*')
+      .eq('indicator_id', indicatorId)
+      .order('year', { ascending: true })
+      .order('month', { ascending: true })
+      .range(from, to)
+  );
 }
 
 async function fetchDataPointsForIndicators(indicatorIds) {
   if (!indicatorIds || !indicatorIds.length) return [];
   const uniqueIds = [...new Set(indicatorIds.filter(Boolean))];
   if (!uniqueIds.length) return [];
-  const { data, error } = await getSupabase()
-    .from('data_points')
-    .select('*')
-    .in('indicator_id', uniqueIds)
-    .order('indicator_id', { ascending: true })
-    .order('year', { ascending: true })
-    .order('month', { ascending: true });
-  if (error) throw error;
-  return data || [];
+  return fetchAllPagedRows((from, to) =>
+    getSupabase()
+      .from('data_points')
+      .select('*')
+      .in('indicator_id', uniqueIds)
+      .order('indicator_id', { ascending: true })
+      .order('year', { ascending: true })
+      .order('month', { ascending: true })
+      .range(from, to)
+  );
 }
 
 async function upsertDataPoints(points) {
@@ -261,12 +283,17 @@ async function deleteAllDataPointsForIndicator(indicatorId) {
 
 async function fetchIndicatorsWithData(indicatorIds) {
   if (!indicatorIds || !indicatorIds.length) return new Set();
-  const { data, error } = await getSupabase()
-    .from('data_points')
-    .select('indicator_id')
-    .in('indicator_id', indicatorIds);
-  if (error) throw error;
-  return new Set((data || []).map(row => row.indicator_id));
+  const uniqueIds = [...new Set(indicatorIds.filter(Boolean))];
+  if (!uniqueIds.length) return new Set();
+  const rows = await fetchAllPagedRows((from, to) =>
+    getSupabase()
+      .from('data_points')
+      .select('indicator_id')
+      .in('indicator_id', uniqueIds)
+      .order('indicator_id', { ascending: true })
+      .range(from, to)
+  );
+  return new Set(rows.map(row => row.indicator_id));
 }
 
 // ── AUTH ───────────────────────────────────────────────────
