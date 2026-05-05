@@ -74,6 +74,11 @@ function getDestinationById(destinationId) {
   return getRenderableDestinations().find(dest => dest.id === destinationId) || null;
 }
 
+function getDestinationDisplayName(destination) {
+  const name = String(destination?.name || '').replace(/\s+/g, ' ').trim();
+  return name || 'Destino sin nombre';
+}
+
 function getIndicatorGroupTitle(indicator) {
   return (indicator?.group_title || '').trim() || 'Sin agrupar';
 }
@@ -278,7 +283,7 @@ function renderSidebar() {
       return `
         <button class="destination-item ${currentDestination?.id === dest.id ? 'active' : ''}" onclick="selectDestination('${dest.id}')">
           <span class="destination-main">
-            <span class="destination-name">${escapeHtml(dest.name)}</span>
+            <span class="destination-name">${escapeHtml(getDestinationDisplayName(dest))}</span>
             <span class="destination-meta">${count} indicador${count !== 1 ? 'es' : ''}</span>
           </span>
           <span class="destination-count">${count}</span>
@@ -330,7 +335,7 @@ function showCurrentDestinationOverview({ restoreScroll = true } = {}) {
   const withData = items.filter(ind => ind.has_data).length;
   const withoutData = items.length - withData;
 
-  document.getElementById('destinationTitle').textContent = currentDestination.name;
+  document.getElementById('destinationTitle').textContent = getDestinationDisplayName(currentDestination);
   document.getElementById('destinationBadge').textContent = `${items.length} indicador${items.length !== 1 ? 'es' : ''}`;
   document.getElementById('destinationSubtitle').textContent = items.length
     ? 'Seleccioná un indicador para entrar al detalle, comparar su evolución anual y exportarlo.'
@@ -406,7 +411,7 @@ function renderDashboard() {
   const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(currentIndicator));
   document.getElementById('viewTitle').textContent = currentIndicator.name;
   document.getElementById('viewDesc').textContent = currentIndicator.description || '';
-  document.getElementById('viewDestinationBadge').textContent = currentDestination?.name || 'Sin destino';
+  document.getElementById('viewDestinationBadge').textContent = currentDestination ? getDestinationDisplayName(currentDestination) : 'Sin destino';
   document.getElementById('statsUnit').textContent = currentIndicator.unit || 'unidades';
   document.getElementById('yearsCount').textContent = shownYears.length === years.length
     ? years.length + ' año' + (years.length !== 1 ? 's' : '')
@@ -638,7 +643,7 @@ function renderComparisonDestinationChoices() {
         onclick="toggleComparisonDestination('${dest.id}')"
       >
         <span class="chip-toggle-marker">${active ? '✓' : '+'}</span>
-        <span>${escapeHtml(dest.name)}</span>
+        <span>${escapeHtml(getDestinationDisplayName(dest))}</span>
       </button>
     `;
   }).join('');

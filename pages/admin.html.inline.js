@@ -118,6 +118,15 @@ function getDestinationById(destinationId) {
   return getRenderableDestinations().find(dest => dest.id === destinationId) || null;
 }
 
+function getDestinationDisplayName(destination) {
+  const name = String(destination?.name || '').replace(/\s+/g, ' ').trim();
+  return name || 'Destino sin nombre';
+}
+
+function isPseudoDestination(destination) {
+  return Boolean(destination?.pseudo || destination?.id === UNASSIGNED_DESTINATION_ID);
+}
+
 function getIndicatorGroupTitle(indicator) {
   return (indicator?.group_title || '').trim() || 'Sin agrupar';
 }
@@ -523,7 +532,7 @@ function renderSidebar() {
         return `
           <button class="destination-item ${currentDestination?.id === dest.id ? 'active' : ''}" onclick="selectDestination('${dest.id}')">
             <span class="destination-main">
-              <span class="destination-name">${escapeHtml(dest.name)}</span>
+              <span class="destination-name">${escapeHtml(getDestinationDisplayName(dest))}</span>
               <span class="destination-meta">${count} indicador${count !== 1 ? 'es' : ''}</span>
             </span>
             <span class="destination-count">${count}</span>
@@ -606,11 +615,17 @@ function showCurrentDestinationOverview() {
   const withData = items.filter(ind => ind.has_data).length;
   const withoutData = items.length - withData;
 
-  document.getElementById('destinationTitle').textContent = currentDestination.name;
+  document.getElementById('destinationTitle').textContent = getDestinationDisplayName(currentDestination);
   document.getElementById('destinationBadge').textContent = `${items.length} indicador${items.length !== 1 ? 'es' : ''}`;
-  document.getElementById('destinationSubtitle').textContent = items.length
-    ? 'Podés editar el destino, crear indicadores nuevos o entrar al detalle de cualquiera.'
-    : 'Todavía no hay indicadores asociados a este destino.';
+  document.getElementById('destinationSubtitle').textContent = isPseudoDestination(currentDestination)
+    ? 'Indicadores que quedaron sin destino asignado. Podés reasignarlos desde cada indicador o borrarlos si no sirven.'
+    : items.length
+      ? 'Podés editar el destino, crear indicadores nuevos o entrar al detalle de cualquiera.'
+      : 'Todavía no hay indicadores asociados a este destino.';
+  const editDestinationAction = document.getElementById('editDestinationAction');
+  const duplicateDestinationAction = document.getElementById('duplicateDestinationAction');
+  if (editDestinationAction) editDestinationAction.style.display = isPseudoDestination(currentDestination) ? 'none' : 'inline-flex';
+  if (duplicateDestinationAction) duplicateDestinationAction.style.display = isPseudoDestination(currentDestination) ? 'none' : 'inline-flex';
   document.getElementById('overviewIndicatorsCount').textContent = String(items.length);
   document.getElementById('overviewWithDataCount').textContent = String(withData);
   document.getElementById('overviewWithoutDataCount').textContent = String(withoutData);
@@ -675,7 +690,7 @@ function renderDashboard() {
 
   document.getElementById('viewTitle').textContent = currentIndicator.name;
   document.getElementById('viewDesc').textContent = currentIndicator.description || '';
-  document.getElementById('viewDestinationBadge').textContent = currentDestination?.name || 'Sin destino';
+  document.getElementById('viewDestinationBadge').textContent = currentDestination ? getDestinationDisplayName(currentDestination) : 'Sin destino';
   document.getElementById('statsUnit').textContent = currentIndicator.unit || 'unidades';
   document.getElementById('yearsCount').textContent = years.length + ' año' + (years.length !== 1 ? 's' : '');
   document.getElementById('statsAnnualHeader').textContent = annualMeta.shortLabel;
@@ -762,7 +777,7 @@ function showEmptyState() {
 
 function populateDestinationSelect(selectedId = '') {
   const select = document.getElementById('indDestination');
-  const options = destinations.map(dest => `<option value="${dest.id}">${escapeHtml(dest.name)}</option>`).join('');
+  const options = destinations.map(dest => `<option value="${dest.id}">${escapeHtml(getDestinationDisplayName(dest))}</option>`).join('');
   select.innerHTML = `<option value="">Seleccionar destino</option>${options}`;
   select.value = selectedId || currentDestination?.id || '';
 }
@@ -827,7 +842,7 @@ function populateDestinationCopySource(selectedId = '') {
     .filter(dest => dest.id !== UNASSIGNED_DESTINATION_ID)
     .map(dest => {
       const count = getIndicatorsForDestination(dest.id).length;
-      return `<option value="${dest.id}">${escapeHtml(dest.name)} · ${count} indicador${count !== 1 ? 'es' : ''}</option>`;
+      return `<option value="${dest.id}">${escapeHtml(getDestinationDisplayName(dest))} · ${count} indicador${count !== 1 ? 'es' : ''}</option>`;
     })
     .join('');
   select.innerHTML = `<option value="">Seleccionar destino base</option>${options}`;
@@ -873,10 +888,14 @@ function openDestinationModal() {
 }
 
 function openEditDestinationModal() {
-  if (!currentDestination || currentDestination.id === UNASSIGNED_DESTINATION_ID) return;
+  if (!currentDestination) return;
+  if (isPseudoDestination(currentDestination)) {
+    toast('“Sin destino” no es un destino real. Reasigná o borrá esos indicadores individualmente.', 'error');
+    return;
+  }
   document.getElementById('destinationModalTitle').textContent = 'Editar destino';
   document.getElementById('destinationId').value = currentDestination.id;
-  document.getElementById('destinationName').value = currentDestination.name || '';
+  document.getElementById('destinationName').value = String(currentDestination.name || '').trim();
   document.getElementById('destinationName').placeholder = 'Ej: Mar del Plata';
   document.getElementById('destinationOrder').value = currentDestination.sort_order ?? '';
   document.getElementById('deleteDestinationBtn').style.display = 'inline-flex';
@@ -890,15 +909,15 @@ function closeDestinationModal() {
 
 async function saveDestination() {
   const id = document.getElementById('destinationId').value;
-  const name = document.getElementById('destinationName').value.trim();
+  const name = normalizeDestinationName(document.getElementById('destinationName').value);
   const sortOrder = document.getElementById('destinationOrder').value;
   const copyEnabled = !id && document.getElementById('destinationCopyEnabled')?.checked === true;
   const sourceDestinationId = copyEnabled ? document.getElementById('destinationCopySource')?.value : '';
   if (!name) { toast('El nombre del destino es obligatorio', 'error'); return; }
   if (copyEnabled && !sourceDestinationId) { toast('Seleccioná el destino base para copiar la estructura.', 'error'); return; }
 
+  let createdDestination = null;
   try {
-    let createdDestination = null;
     let copiedIndicators = [];
     if (id) {
       await updateDestination(id, { name, sort_order: sortOrder === '' ? null : Number(sortOrder) });
@@ -906,7 +925,13 @@ async function saveDestination() {
     } else {
       createdDestination = await createDestination(name, sortOrder === '' ? null : Number(sortOrder));
       if (copyEnabled) {
-        copiedIndicators = await duplicateIndicatorsToDestination(sourceDestinationId, createdDestination.id);
+        try {
+          copiedIndicators = await duplicateIndicatorsToDestination(sourceDestinationId, createdDestination.id);
+        } catch (copyError) {
+          await deleteIndicatorsForDestination(createdDestination.id).catch(() => {});
+          await deleteDestination(createdDestination.id).catch(() => {});
+          throw copyError;
+        }
         toast(`Destino creado con ${copiedIndicators.length} indicador${copiedIndicators.length !== 1 ? 'es' : ''} copiado${copiedIndicators.length !== 1 ? 's' : ''}.`, 'success');
       } else {
         toast('Destino creado', 'success');
@@ -914,7 +939,7 @@ async function saveDestination() {
     }
     closeDestinationModal();
     await loadCoreData({ keepSelection: false });
-    const targetId = createdDestination?.id || destinations.find(d => d.name.toLowerCase() === name.toLowerCase())?.id;
+    const targetId = createdDestination?.id || destinations.find(d => normalizeDestinationName(d.name).toLowerCase() === name.toLowerCase())?.id;
     if (targetId) await selectDestination(targetId);
   } catch (e) {
     toast('Error guardando destino: ' + e.message, 'error');
@@ -922,17 +947,47 @@ async function saveDestination() {
 }
 
 async function deleteCurrentDestination() {
-  if (!currentDestination || currentDestination.id === UNASSIGNED_DESTINATION_ID) return;
-  const linkedIndicators = getIndicatorsForDestination(currentDestination.id);
-  if (linkedIndicators.length) {
-    toast('No podés eliminar un destino que todavía tiene indicadores asignados.', 'error');
+  if (!currentDestination) return;
+  if (isPseudoDestination(currentDestination)) {
+    toast('“Sin destino” no es un destino real. Reasigná o borrá esos indicadores individualmente.', 'error');
     return;
   }
-  if (!confirm('¿Eliminar este destino?')) return;
+
+  const linkedIndicators = getIndicatorsForDestination(currentDestination.id);
+  let withDataCount = 0;
   try {
+    const ids = linkedIndicators.map(ind => ind.id);
+    const presence = await fetchIndicatorsWithData(ids);
+    withDataCount = presence.size;
+  } catch (e) {
+    withDataCount = -1;
+  }
+
+  let message = `¿Eliminar el destino “${getDestinationDisplayName(currentDestination)}”?`;
+  const shouldDeleteEmptyIndicators = linkedIndicators.length > 0 && withDataCount === 0;
+  if (linkedIndicators.length && withDataCount === 0) {
+    message += `
+
+Tiene ${linkedIndicators.length} indicador${linkedIndicators.length !== 1 ? 'es' : ''} sin datos cargados. Se eliminarán también esos indicadores para no dejar basura en “Sin destino”.`;
+  } else if (linkedIndicators.length && withDataCount > 0) {
+    message += `
+
+Tiene ${linkedIndicators.length} indicador${linkedIndicators.length !== 1 ? 'es' : ''}, de los cuales ${withDataCount} tienen datos. Se eliminará solo el destino; los indicadores y sus datos quedarán en “Sin destino” para no perder información.`;
+  } else if (linkedIndicators.length) {
+    message += `
+
+No pude verificar si sus indicadores tienen datos. Por seguridad se eliminará solo el destino; los indicadores quedarán en “Sin destino”.`;
+  }
+  if (!confirm(message)) return;
+
+  try {
+    if (shouldDeleteEmptyIndicators) {
+      await deleteIndicatorsForDestination(currentDestination.id);
+    }
     await deleteDestination(currentDestination.id);
     closeDestinationModal();
     currentDestination = null;
+    currentIndicator = null;
     await loadCoreData({ keepSelection: false });
     toast('Destino eliminado', 'success');
   } catch (e) {
@@ -959,7 +1014,7 @@ function populateIndicatorTemplateSelect(selectedId = '') {
   const select = document.getElementById('indicatorTemplateSelect');
   const groups = new Map();
   indicators.forEach(ind => {
-    const destinationName = ind.destination?.name || 'Sin destino';
+    const destinationName = ind.destination ? getDestinationDisplayName(ind.destination) : 'Sin destino';
     if (!groups.has(destinationName)) groups.set(destinationName, []);
     groups.get(destinationName).push(ind);
   });
@@ -1564,7 +1619,7 @@ function renderComparisonDestinationChoices() {
     return `
       <label class="chip-checkbox ${checked ? 'active' : ''}">
         <input type="checkbox" value="${dest.id}" ${checked ? 'checked' : ''} onchange="toggleComparisonDestination('${dest.id}', this.checked)"/>
-        ${escapeHtml(dest.name)}
+        ${escapeHtml(getDestinationDisplayName(dest))}
       </label>
     `;
   }).join('');

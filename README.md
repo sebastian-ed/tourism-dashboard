@@ -118,3 +118,16 @@ La duplicación copia:
 - aclaraciones metodológicas
 
 No copia datos mensuales, observaciones puntuales ni marcas de dato provisorio. Esto evita contaminar el destino nuevo con valores del destino base.
+
+## Corrección de duplicación masiva de destinos
+
+Esta versión corrige un problema operativo que aparecía cuando la base acumulaba muchos indicadores:
+
+- la app ahora pagina la lectura completa de `indicators`, no solo el primer bloque devuelto por Supabase;
+- los destinos duplicados ya no deberían aparecer con 0 indicadores por lectura parcial;
+- la duplicación valida que se hayan copiado todos los indicadores esperados;
+- si una duplicación falla, se revierte el destino nuevo para no dejar destinos basura;
+- los destinos sin nombre se muestran como `Destino sin nombre` para poder identificarlos y editarlos;
+- se puede eliminar un destino aunque no tenga datos cargados. Si sus indicadores tampoco tienen datos, la app también elimina esos indicadores para no acumularlos en `Sin destino`.
+
+No requiere cambios nuevos de SQL.

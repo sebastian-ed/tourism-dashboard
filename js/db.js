@@ -41,19 +41,26 @@ function slugify(value) {
 
 // ── DESTINATIONS ───────────────────────────────────────────
 async function fetchDestinations() {
-  const { data, error } = await getSupabase()
-    .from('destinations')
-    .select('*')
-    .order('sort_order', { ascending: true })
-    .order('name', { ascending: true });
-  if (error) throw error;
-  return data || [];
+  return fetchAllPagedRows((from, to) =>
+    getSupabase()
+      .from('destinations')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
+      .range(from, to)
+  );
+}
+
+function normalizeDestinationName(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
 async function createDestination(name, sortOrder = null) {
+  const cleanName = normalizeDestinationName(name);
+  if (!cleanName) throw new Error('El nombre del destino es obligatorio.');
   const payload = {
-    name: name.trim(),
-    slug: slugify(name),
+    name: cleanName,
+    slug: slugify(cleanName),
   };
   if (sortOrder !== null && sortOrder !== '' && !isNaN(sortOrder)) {
     payload.sort_order = Number(sortOrder);
@@ -70,8 +77,9 @@ async function createDestination(name, sortOrder = null) {
 
 async function updateDestination(id, fields) {
   const payload = { ...fields, updated_at: new Date().toISOString() };
-  if (payload.name) {
-    payload.name = payload.name.trim();
+  if (Object.prototype.hasOwnProperty.call(payload, 'name')) {
+    payload.name = normalizeDestinationName(payload.name);
+    if (!payload.name) throw new Error('El nombre del destino es obligatorio.');
     if (!payload.slug) payload.slug = slugify(payload.name);
   }
   if (payload.sort_order === '' || payload.sort_order === null || payload.sort_order === undefined) {
@@ -114,14 +122,16 @@ function normalizeIndicatorRow(item) {
 }
 
 async function fetchIndicators() {
-  const { data, error } = await getSupabase()
-    .from('indicators')
-    .select('*, destinations(id, name, slug)')
-    .order('destination_id', { ascending: true, nullsFirst: true })
-    .order('sort_order', { ascending: true, nullsFirst: true })
-    .order('name', { ascending: true });
-  if (error) throw error;
-  return (data || []).map(normalizeIndicatorRow);
+  const rows = await fetchAllPagedRows((from, to) =>
+    getSupabase()
+      .from('indicators')
+      .select('*, destinations(id, name, slug)')
+      .order('destination_id', { ascending: true, nullsFirst: true })
+      .order('sort_order', { ascending: true, nullsFirst: true })
+      .order('name', { ascending: true })
+      .range(from, to)
+  );
+  return rows.map(normalizeIndicatorRow);
 }
 
 async function createIndicator(payload) {
@@ -191,6 +201,15 @@ async function deleteIndicator(id) {
   if (error) throw error;
 }
 
+async function deleteIndicatorsForDestination(destinationId) {
+  if (!destinationId) return;
+  const { error } = await getSupabase()
+    .from('indicators')
+    .delete()
+    .eq('destination_id', destinationId);
+  if (error) throw error;
+}
+
 async function updateIndicatorsSortOrder(destinationId, orderedIds) {
   const uniqueIds = [...new Set((orderedIds || []).filter(Boolean))];
   if (!uniqueIds.length) return;
@@ -213,24 +232,30 @@ async function updateIndicatorsSortOrder(destinationId, orderedIds) {
 }
 
 
+async function fetchIndicatorsForDestination(destinationId) {
+  if (!destinationId) return [];
+  const rows = await fetchAllPagedRows((from, to) =>
+    getSupabase()
+      .from('indicators')
+      .select('*')
+      .eq('destination_id', destinationId)
+      .order('sort_order', { ascending: true, nullsFirst: true })
+      .order('name', { ascending: true })
+      .range(from, to)
+  );
+  return rows;
+}
+
 async function duplicateIndicatorsToDestination(sourceDestinationId, targetDestinationId) {
   if (!sourceDestinationId || !targetDestinationId) {
     throw new Error('Falta seleccionar destino origen o destino nuevo.');
   }
 
-  const { data: sourceIndicators, error: fetchError } = await getSupabase()
-    .from('indicators')
-    .select('*')
-    .eq('destination_id', sourceDestinationId)
-    .order('sort_order', { ascending: true, nullsFirst: true })
-    .order('name', { ascending: true });
-  if (fetchError) throw fetchError;
-
-  const source = sourceIndicators || [];
+  const source = await fetchIndicatorsForDestination(sourceDestinationId);
   if (!source.length) return [];
 
   const payload = source.map((indicator, index) => ({
-    name: indicator.name,
+    name: normalizeDestinationName(indicator.name) || 'Indicador sin nombre',
     description: indicator.description || '',
     unit: indicator.unit || '',
     destination_id: targetDestinationId,
@@ -245,13 +270,23 @@ async function duplicateIndicatorsToDestination(sourceDestinationId, targetDesti
     methodology_note: (indicator.methodology_note || '').trim(),
   }));
 
-  const { data, error } = await getSupabase()
-    .from('indicators')
-    .insert(payload)
-    .select('*, destinations(id, name, slug)');
-  if (error) throw error;
+  const inserted = [];
+  const CHUNK_SIZE = 100;
+  for (let i = 0; i < payload.length; i += CHUNK_SIZE) {
+    const chunk = payload.slice(i, i + CHUNK_SIZE);
+    const { data, error } = await getSupabase()
+      .from('indicators')
+      .insert(chunk)
+      .select('*, destinations(id, name, slug)');
+    if (error) throw error;
+    inserted.push(...(data || []).map(normalizeIndicatorRow));
+  }
 
-  return (data || []).map(normalizeIndicatorRow);
+  if (inserted.length !== source.length) {
+    throw new Error(`La copia quedó incompleta: se copiaron ${inserted.length} de ${source.length} indicadores.`);
+  }
+
+  return inserted;
 }
 
 // ── DATA POINTS ─────────────────────────────────────────────
