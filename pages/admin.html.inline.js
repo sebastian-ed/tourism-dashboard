@@ -819,12 +819,56 @@ function toggleFormulaFields() {
   document.getElementById('annualModeDescription').textContent = getAnnualCalcMeta(mode).description;
 }
 
+
+function populateDestinationCopySource(selectedId = '') {
+  const select = document.getElementById('destinationCopySource');
+  if (!select) return;
+  const options = destinations
+    .filter(dest => dest.id !== UNASSIGNED_DESTINATION_ID)
+    .map(dest => {
+      const count = getIndicatorsForDestination(dest.id).length;
+      return `<option value="${dest.id}">${escapeHtml(dest.name)} · ${count} indicador${count !== 1 ? 'es' : ''}</option>`;
+    })
+    .join('');
+  select.innerHTML = `<option value="">Seleccionar destino base</option>${options}`;
+  select.value = selectedId || '';
+}
+
+function toggleDestinationCopyFields() {
+  const enabled = document.getElementById('destinationCopyEnabled')?.checked === true;
+  const wrap = document.getElementById('destinationCopySourceWrap');
+  if (wrap) wrap.style.display = enabled ? 'block' : 'none';
+}
+
+function resetDestinationDuplicateControls({ enabled = false, selectedSourceId = '', visible = true } = {}) {
+  const section = document.getElementById('destinationDuplicateSection');
+  const checkbox = document.getElementById('destinationCopyEnabled');
+  if (section) section.style.display = visible ? 'block' : 'none';
+  if (checkbox) checkbox.checked = enabled;
+  populateDestinationCopySource(selectedSourceId);
+  toggleDestinationCopyFields();
+}
+
+function openDuplicateDestinationModal(sourceDestinationId = '') {
+  const sourceId = sourceDestinationId || (currentDestination?.id !== UNASSIGNED_DESTINATION_ID ? currentDestination?.id : '');
+  document.getElementById('destinationModalTitle').textContent = 'Duplicar destino';
+  document.getElementById('destinationId').value = '';
+  document.getElementById('destinationName').value = '';
+  document.getElementById('destinationName').placeholder = 'Nombre del nuevo destino';
+  document.getElementById('destinationOrder').value = '';
+  document.getElementById('deleteDestinationBtn').style.display = 'none';
+  resetDestinationDuplicateControls({ enabled: true, selectedSourceId: sourceId, visible: true });
+  document.getElementById('destinationModal').classList.add('open');
+}
+
 function openDestinationModal() {
   document.getElementById('destinationModalTitle').textContent = 'Nuevo destino';
   document.getElementById('destinationId').value = '';
   document.getElementById('destinationName').value = '';
+  document.getElementById('destinationName').placeholder = 'Ej: Bahía Blanca';
   document.getElementById('destinationOrder').value = '';
   document.getElementById('deleteDestinationBtn').style.display = 'none';
+  resetDestinationDuplicateControls({ enabled: false, selectedSourceId: currentDestination?.id !== UNASSIGNED_DESTINATION_ID ? currentDestination?.id : '', visible: true });
   document.getElementById('destinationModal').classList.add('open');
 }
 
@@ -833,8 +877,10 @@ function openEditDestinationModal() {
   document.getElementById('destinationModalTitle').textContent = 'Editar destino';
   document.getElementById('destinationId').value = currentDestination.id;
   document.getElementById('destinationName').value = currentDestination.name || '';
+  document.getElementById('destinationName').placeholder = 'Ej: Mar del Plata';
   document.getElementById('destinationOrder').value = currentDestination.sort_order ?? '';
   document.getElementById('deleteDestinationBtn').style.display = 'inline-flex';
+  resetDestinationDuplicateControls({ enabled: false, selectedSourceId: '', visible: false });
   document.getElementById('destinationModal').classList.add('open');
 }
 
@@ -846,20 +892,30 @@ async function saveDestination() {
   const id = document.getElementById('destinationId').value;
   const name = document.getElementById('destinationName').value.trim();
   const sortOrder = document.getElementById('destinationOrder').value;
+  const copyEnabled = !id && document.getElementById('destinationCopyEnabled')?.checked === true;
+  const sourceDestinationId = copyEnabled ? document.getElementById('destinationCopySource')?.value : '';
   if (!name) { toast('El nombre del destino es obligatorio', 'error'); return; }
+  if (copyEnabled && !sourceDestinationId) { toast('Seleccioná el destino base para copiar la estructura.', 'error'); return; }
 
   try {
+    let createdDestination = null;
+    let copiedIndicators = [];
     if (id) {
       await updateDestination(id, { name, sort_order: sortOrder === '' ? null : Number(sortOrder) });
       toast('Destino actualizado', 'success');
     } else {
-      await createDestination(name, sortOrder === '' ? null : Number(sortOrder));
-      toast('Destino creado', 'success');
+      createdDestination = await createDestination(name, sortOrder === '' ? null : Number(sortOrder));
+      if (copyEnabled) {
+        copiedIndicators = await duplicateIndicatorsToDestination(sourceDestinationId, createdDestination.id);
+        toast(`Destino creado con ${copiedIndicators.length} indicador${copiedIndicators.length !== 1 ? 'es' : ''} copiado${copiedIndicators.length !== 1 ? 's' : ''}.`, 'success');
+      } else {
+        toast('Destino creado', 'success');
+      }
     }
     closeDestinationModal();
     await loadCoreData({ keepSelection: false });
-    const createdOrUpdated = destinations.find(d => d.name.toLowerCase() === name.toLowerCase());
-    if (createdOrUpdated) await selectDestination(createdOrUpdated.id);
+    const targetId = createdDestination?.id || destinations.find(d => d.name.toLowerCase() === name.toLowerCase())?.id;
+    if (targetId) await selectDestination(targetId);
   } catch (e) {
     toast('Error guardando destino: ' + e.message, 'error');
   }

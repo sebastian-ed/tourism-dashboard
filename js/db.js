@@ -212,6 +212,48 @@ async function updateIndicatorsSortOrder(destinationId, orderedIds) {
   if (failed?.error) throw failed.error;
 }
 
+
+async function duplicateIndicatorsToDestination(sourceDestinationId, targetDestinationId) {
+  if (!sourceDestinationId || !targetDestinationId) {
+    throw new Error('Falta seleccionar destino origen o destino nuevo.');
+  }
+
+  const { data: sourceIndicators, error: fetchError } = await getSupabase()
+    .from('indicators')
+    .select('*')
+    .eq('destination_id', sourceDestinationId)
+    .order('sort_order', { ascending: true, nullsFirst: true })
+    .order('name', { ascending: true });
+  if (fetchError) throw fetchError;
+
+  const source = sourceIndicators || [];
+  if (!source.length) return [];
+
+  const payload = source.map((indicator, index) => ({
+    name: indicator.name,
+    description: indicator.description || '',
+    unit: indicator.unit || '',
+    destination_id: targetDestinationId,
+    annual_calc_mode: indicator.annual_calc_mode || 'sum',
+    annual_chart_visible: indicator.annual_chart_visible !== false,
+    metric_key: indicator.metric_key || '',
+    formula_numerator_key: indicator.formula_numerator_key || null,
+    formula_denominator_key: indicator.formula_denominator_key || null,
+    formula_multiplier: indicator.formula_multiplier === null || indicator.formula_multiplier === undefined ? 1 : Number(indicator.formula_multiplier),
+    group_title: indicator.group_title || '',
+    sort_order: indicator.sort_order === null || indicator.sort_order === undefined ? index : Number(indicator.sort_order),
+    methodology_note: (indicator.methodology_note || '').trim(),
+  }));
+
+  const { data, error } = await getSupabase()
+    .from('indicators')
+    .insert(payload)
+    .select('*, destinations(id, name, slug)');
+  if (error) throw error;
+
+  return (data || []).map(normalizeIndicatorRow);
+}
+
 // ── DATA POINTS ─────────────────────────────────────────────
 async function fetchDataPoints(indicatorId) {
   return fetchAllPagedRows((from, to) =>

@@ -101,3 +101,20 @@ Ahora cada dato mensual puede marcarse como **provisorio** y/o llevar una **obse
 - Se configura desde el modal **Cargar datos**, seleccionando una celda puntual.
 - En las tablas se muestra con un **asterisco (")** junto al valor.
 - Al pasar el mouse sobre el valor se ve el detalle de la observación.
+
+
+## Duplicación de destinos
+
+Desde el panel admin podés crear un destino nuevo copiando la estructura completa de otro destino existente.
+
+La duplicación copia:
+- indicadores
+- unidades
+- descripciones
+- claves comparables
+- fórmulas anuales
+- títulos agrupadores
+- orden visual
+- aclaraciones metodológicas
+
+No copia datos mensuales, observaciones puntuales ni marcas de dato provisorio. Esto evita contaminar el destino nuevo con valores del destino base.
