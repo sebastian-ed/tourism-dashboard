@@ -1350,10 +1350,19 @@ function openDestinationModal() {
 
 function openEditDestinationModal() {
   if (!currentDestination) return;
+
   if (isPseudoDestination(currentDestination)) {
-    toast('“Sin destino” no es un destino real. Reasigná o borrá esos indicadores individualmente.', 'error');
+    document.getElementById('destinationModalTitle').textContent = 'Editar “Sin destino”';
+    document.getElementById('destinationId').value = UNASSIGNED_DESTINATION_ID;
+    document.getElementById('destinationName').value = '';
+    document.getElementById('destinationName').placeholder = 'Nombre del destino real para estos indicadores';
+    document.getElementById('destinationOrder').value = '';
+    document.getElementById('deleteDestinationBtn').style.display = 'inline-flex';
+    resetDestinationDuplicateControls({ enabled: false, selectedSourceId: '', visible: false });
+    document.getElementById('destinationModal').classList.add('open');
     return;
   }
+
   document.getElementById('destinationModalTitle').textContent = 'Editar destino';
   document.getElementById('destinationId').value = currentDestination.id;
   document.getElementById('destinationName').value = String(currentDestination.name || '').trim();
@@ -1380,7 +1389,11 @@ async function saveDestination() {
   let createdDestination = null;
   try {
     let copiedIndicators = [];
-    if (id) {
+    if (id === UNASSIGNED_DESTINATION_ID) {
+      createdDestination = await createDestination(name, sortOrder === '' ? null : Number(sortOrder));
+      const movedCount = await moveUnassignedIndicatorsToDestination(createdDestination.id);
+      toast(`“Sin destino” convertido en “${getDestinationDisplayName(createdDestination)}” con ${movedCount} indicador${movedCount !== 1 ? 'es' : ''}.`, 'success');
+    } else if (id) {
       await updateDestination(id, { name, sort_order: sortOrder === '' ? null : Number(sortOrder) });
       toast('Destino actualizado', 'success');
     } else {
@@ -1410,7 +1423,22 @@ async function saveDestination() {
 async function deleteCurrentDestination() {
   if (!currentDestination) return;
   if (isPseudoDestination(currentDestination)) {
-    toast('“Sin destino” no es un destino real. Reasigná o borrá esos indicadores individualmente.', 'error');
+    const linkedIndicators = getIndicatorsForDestination(UNASSIGNED_DESTINATION_ID);
+    const message = linkedIndicators.length
+      ? `¿Eliminar completamente “Sin destino”?\n\nSe eliminarán ${linkedIndicators.length} indicador${linkedIndicators.length !== 1 ? 'es' : ''} sin destino y todos sus datos asociados. Esta acción no se puede deshacer.`
+      : '¿Eliminar “Sin destino”? No tiene indicadores asociados.';
+    if (!confirm(message)) return;
+
+    try {
+      await deleteUnassignedIndicators();
+      closeDestinationModal();
+      currentDestination = null;
+      currentIndicator = null;
+      await loadCoreData({ keepSelection: false });
+      toast('“Sin destino” eliminado completamente', 'success');
+    } catch (e) {
+      toast('Error eliminando “Sin destino”: ' + e.message, 'error');
+    }
     return;
   }
 

@@ -131,3 +131,12 @@ Esta versión corrige un problema operativo que aparecía cuando la base acumula
 - se puede eliminar un destino aunque no tenga datos cargados. Si sus indicadores tampoco tienen datos, la app también elimina esos indicadores para no acumularlos en `Sin destino`.
 
 No requiere cambios nuevos de SQL.
+
+## Gestión de “Sin destino”
+
+El bucket **Sin destino** ahora se puede gestionar desde admin:
+
+- **Editar “Sin destino”** crea un destino real con el nombre indicado y mueve allí todos los indicadores sin destino.
+- **Eliminar “Sin destino”** borra completamente los indicadores sin destino y sus datos asociados.
+
+No requiere cambios de SQL.

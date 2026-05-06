@@ -210,6 +210,46 @@ async function deleteIndicatorsForDestination(destinationId) {
   if (error) throw error;
 }
 
+async function fetchUnassignedIndicators() {
+  return fetchAllPagedRows((from, to) =>
+    getSupabase()
+      .from('indicators')
+      .select('*')
+      .is('destination_id', null)
+      .order('sort_order', { ascending: true, nullsFirst: true })
+      .order('name', { ascending: true })
+      .range(from, to)
+  );
+}
+
+async function moveUnassignedIndicatorsToDestination(targetDestinationId) {
+  if (!targetDestinationId) throw new Error('Falta el destino de destino.');
+  const source = await fetchUnassignedIndicators();
+  if (!source.length) return 0;
+
+  const timestamp = new Date().toISOString();
+  const CHUNK_SIZE = 100;
+  let moved = 0;
+  for (let i = 0; i < source.length; i += CHUNK_SIZE) {
+    const chunk = source.slice(i, i + CHUNK_SIZE);
+    const { error } = await getSupabase()
+      .from('indicators')
+      .update({ destination_id: targetDestinationId, updated_at: timestamp })
+      .in('id', chunk.map(indicator => indicator.id));
+    if (error) throw error;
+    moved += chunk.length;
+  }
+  return moved;
+}
+
+async function deleteUnassignedIndicators() {
+  const { error } = await getSupabase()
+    .from('indicators')
+    .delete()
+    .is('destination_id', null);
+  if (error) throw error;
+}
+
 async function updateIndicatorsSortOrder(destinationId, orderedIds) {
   const uniqueIds = [...new Set((orderedIds || []).filter(Boolean))];
   if (!uniqueIds.length) return;
