@@ -737,18 +737,47 @@ input, select, textarea { font-family: inherit; }
 }
 .comparison-controls {
   display: grid;
-  grid-template-columns: minmax(220px, 300px) 1fr auto;
+  grid-template-columns: minmax(260px, 340px) 1fr auto;
   gap: 14px;
   align-items: end;
   margin-bottom: 18px;
 }
+.compare-metric-group {
+  display: grid;
+  gap: 8px;
+}
+.compare-select-label {
+  margin-top: 2px;
+}
 .compare-destination-list {
+  display: grid;
+  gap: 10px;
+  max-height: 178px;
+  overflow-y: auto;
+  padding: 4px 2px 4px 0;
+}
+.compare-helper-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.compare-helper-row strong {
+  color: var(--text-primary);
+}
+.compare-helper-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.compare-chip-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  max-height: 120px;
-  overflow-y: auto;
-  padding: 4px 0;
 }
 .chip-toggle {
   display: inline-flex;

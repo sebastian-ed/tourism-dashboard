@@ -1613,59 +1613,217 @@ async function saveData() {
   }
 }
 
-function renderComparisonControls() {
-  const metricSelect = document.getElementById('compareMetricKey');
-  const options = getUniqueMetricOptions();
-  if (!options.length) {
-    metricSelect.innerHTML = '<option value="">No hay indicadores comparables</option>';
-    document.getElementById('compareDestinationList').innerHTML = '';
-    return;
-  }
 
-  const selectedMetric = options.find(opt => opt.key === comparisonSelection.metricKey)?.key || comparisonSelection.metricKey || options[0].key;
-  comparisonSelection.metricKey = selectedMetric;
-  metricSelect.innerHTML = options.map(opt => `<option value="${opt.key}" ${selectedMetric === opt.key ? 'selected' : ''}>${escapeHtml(opt.label)} · ${escapeHtml(opt.key)}</option>`).join('');
-  renderComparisonDestinationChoices();
+function normalizeComparisonText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 }
 
-function renderComparisonDestinationChoices() {
-  const metricKey = comparisonSelection.metricKey;
-  const relevantIndicators = indicators.filter(ind => getMetricKey(ind) === metricKey && ind.destination_id);
-  const destinationIds = [...new Set(relevantIndicators.map(ind => ind.destination_id))];
-  const availableDestinations = destinations.filter(dest => destinationIds.includes(dest.id));
-  const defaultSelection = comparisonSelection.destinationIds.filter(id => destinationIds.includes(id));
-  comparisonSelection.destinationIds = defaultSelection.length ? defaultSelection : availableDestinations.slice(0, 2).map(dest => dest.id);
+function buildComparableMetricOptions() {
+  const byKey = new Map();
+  indicators.forEach(ind => {
+    const key = getMetricKey(ind);
+    if (!key || !ind.destination_id) return;
+    if (!byKey.has(key)) {
+      byKey.set(key, {
+        key,
+        label: ind.name || key,
+        unit: ind.unit || '',
+        groupTitle: getIndicatorGroupTitle(ind),
+        destinationIds: new Set(),
+      });
+    }
+    const entry = byKey.get(key);
+    entry.destinationIds.add(ind.destination_id);
+    if (!entry.unit && ind.unit) entry.unit = ind.unit;
+    const groupTitle = getIndicatorGroupTitle(ind);
+    if ((!entry.groupTitle || entry.groupTitle === 'Sin agrupar') && groupTitle && groupTitle !== 'Sin agrupar') {
+      entry.groupTitle = groupTitle;
+    }
+  });
 
-  const container = document.getElementById('compareDestinationList');
-  if (!availableDestinations.length) {
-    container.innerHTML = '<span class="help-text">No hay destinos comparables para esa clave.</span>';
+  return [...byKey.values()]
+    .map(item => ({
+      ...item,
+      count: item.destinationIds.size,
+      destinationIds: [...item.destinationIds],
+      groupTitle: item.groupTitle || 'Sin agrupar',
+    }))
+    .filter(item => item.count >= 2)
+    .sort((a, b) => {
+      const groupDiff = (a.groupTitle || '').localeCompare(b.groupTitle || '', 'es');
+      if (groupDiff !== 0) return groupDiff;
+      return (a.label || '').localeCompare(b.label || '', 'es');
+    });
+}
+
+function getFilteredComparableMetricOptions() {
+  const options = buildComparableMetricOptions();
+  const searchEl = document.getElementById('compareMetricSearch');
+  const query = normalizeComparisonText(searchEl?.value || '');
+  if (!query) return options;
+  return options.filter(opt => {
+    const haystack = normalizeComparisonText(`${opt.label} ${opt.groupTitle} ${opt.unit}`);
+    return haystack.includes(query);
+  });
+}
+
+function renderComparisonMetricOptions(options, selectedMetric) {
+  const metricSelect = document.getElementById('compareMetricKey');
+  if (!options.length) {
+    metricSelect.innerHTML = '<option value="">Sin resultados comparables</option>';
     return;
   }
 
-  container.innerHTML = availableDestinations.map(dest => {
-    const checked = comparisonSelection.destinationIds.includes(dest.id);
-    return `
-      <label class="chip-checkbox ${checked ? 'active' : ''}">
-        <input type="checkbox" value="${dest.id}" ${checked ? 'checked' : ''} onchange="toggleComparisonDestination('${dest.id}', this.checked)"/>
-        ${escapeHtml(getDestinationDisplayName(dest))}
-      </label>
-    `;
-  }).join('');
+  const groups = new Map();
+  options.forEach(opt => {
+    const groupTitle = opt.groupTitle || 'Sin agrupar';
+    if (!groups.has(groupTitle)) groups.set(groupTitle, []);
+    groups.get(groupTitle).push(opt);
+  });
+
+  metricSelect.innerHTML = [...groups.entries()].map(([groupTitle, items]) => `
+    <optgroup label="${escapeHtml(groupTitle)}">
+      ${items.map(opt => {
+        const unit = opt.unit ? ` · ${escapeHtml(opt.unit)}` : '';
+        const countLabel = `${opt.count} destino${opt.count !== 1 ? 's' : ''}`;
+        return `<option value="${escapeHtml(opt.key)}" ${selectedMetric === opt.key ? 'selected' : ''}>${escapeHtml(opt.label)}${unit} · ${countLabel}</option>`;
+      }).join('')}
+    </optgroup>
+  `).join('');
+}
+
+function getComparisonAvailableDestinations(metricKey = comparisonSelection.metricKey) {
+  const relevantIndicators = indicators.filter(ind => getMetricKey(ind) === metricKey && ind.destination_id);
+  const destinationIds = [...new Set(relevantIndicators.map(ind => ind.destination_id))];
+  return destinations.filter(dest => destinationIds.includes(dest.id));
+}
+
+function getAutoComparisonSelection(availableDestinations) {
+  const selected = [];
+  if (currentDestination?.id && availableDestinations.some(dest => dest.id === currentDestination.id)) {
+    selected.push(currentDestination.id);
+  }
+  availableDestinations.forEach(dest => {
+    if (selected.length >= Math.min(2, availableDestinations.length)) return;
+    if (!selected.includes(dest.id)) selected.push(dest.id);
+  });
+  return selected;
+}
+
+function renderComparisonControls() {
+  const metricSelect = document.getElementById('compareMetricKey');
+  const allComparableOptions = buildComparableMetricOptions();
+  const filteredOptions = getFilteredComparableMetricOptions();
+  const container = document.getElementById('compareDestinationList');
+
+  if (!allComparableOptions.length) {
+    metricSelect.innerHTML = '<option value="">No hay indicadores repetidos en dos o más destinos</option>';
+    container.innerHTML = '<span class="help-text">Todavía no hay indicadores comparables. Para comparar, la misma clave comparable debe existir en al menos dos destinos.</span>';
+    return;
+  }
+
+  if (!filteredOptions.length) {
+    metricSelect.innerHTML = '<option value="">Sin resultados para ese filtro</option>';
+    container.innerHTML = '<span class="help-text">No hay indicadores comparables que coincidan con la búsqueda.</span>';
+    comparisonSelection.metricKey = '';
+    clearComparisonResults();
+    return;
+  }
+
+  const searchValue = document.getElementById('compareMetricSearch')?.value || '';
+  const previousMetric = comparisonSelection.metricKey;
+  const currentStillVisible = filteredOptions.some(opt => opt.key === comparisonSelection.metricKey);
+  const currentStillComparable = allComparableOptions.some(opt => opt.key === comparisonSelection.metricKey);
+  const selectedMetric = currentStillVisible
+    ? comparisonSelection.metricKey
+    : (currentStillComparable && !searchValue ? comparisonSelection.metricKey : filteredOptions[0].key);
+  comparisonSelection.metricKey = selectedMetric;
+  if (previousMetric && previousMetric !== selectedMetric) {
+    comparisonSelection.destinationIds = [];
+  }
+  renderComparisonMetricOptions(filteredOptions, selectedMetric);
+  renderComparisonDestinationChoices({ autoSelect: true });
+}
+
+function handleComparisonMetricSearch() {
+  renderComparisonControls();
+  clearComparisonResults();
+}
+
+function renderComparisonDestinationChoices({ autoSelect = false } = {}) {
+  const metricKey = comparisonSelection.metricKey;
+  const selectedOption = buildComparableMetricOptions().find(opt => opt.key === metricKey);
+  const availableDestinations = getComparisonAvailableDestinations(metricKey);
+  const destinationIds = availableDestinations.map(dest => dest.id);
+  const preservedSelection = comparisonSelection.destinationIds.filter(id => destinationIds.includes(id));
+  comparisonSelection.destinationIds = preservedSelection.length
+    ? preservedSelection
+    : (autoSelect ? getAutoComparisonSelection(availableDestinations) : []);
+
+  const container = document.getElementById('compareDestinationList');
+  if (!selectedOption || availableDestinations.length < 2) {
+    container.innerHTML = '<span class="help-text">Ese indicador no está disponible en dos o más destinos.</span>';
+    return;
+  }
+
+  const selectedCount = comparisonSelection.destinationIds.length;
+  container.innerHTML = `
+    <div class="compare-helper-row">
+      <span>${escapeHtml(selectedOption.label)} está disponible en <strong>${availableDestinations.length}</strong> destino${availableDestinations.length !== 1 ? 's' : ''}. Seleccionados: <strong>${selectedCount}</strong>.</span>
+      <span class="compare-helper-actions">
+        <button class="btn btn-secondary btn-sm" type="button" onclick="selectAllComparisonDestinations()">Todos</button>
+        <button class="btn btn-ghost btn-sm" type="button" onclick="clearComparisonDestinations()">Limpiar</button>
+      </span>
+    </div>
+    <div class="compare-chip-grid">
+      ${availableDestinations.map(dest => {
+        const active = comparisonSelection.destinationIds.includes(dest.id);
+        return `
+          <button
+            type="button"
+            class="chip-toggle ${active ? 'active' : ''}"
+            aria-pressed="${active ? 'true' : 'false'}"
+            onclick="toggleComparisonDestination('${dest.id}')"
+          >
+            <span class="chip-toggle-marker">${active ? '✓' : '+'}</span>
+            <span>${escapeHtml(dest.name)}</span>
+          </button>
+        `;
+      }).join('')}
+    </div>
+  `;
 }
 
 function handleComparisonMetricChange() {
   comparisonSelection.metricKey = document.getElementById('compareMetricKey').value;
   comparisonSelection.destinationIds = [];
-  renderComparisonDestinationChoices();
+  renderComparisonDestinationChoices({ autoSelect: true });
   clearComparisonResults();
 }
 
-function toggleComparisonDestination(destinationId, checked) {
+function toggleComparisonDestination(destinationId) {
   const next = new Set(comparisonSelection.destinationIds);
-  if (checked) next.add(destinationId);
-  else next.delete(destinationId);
+  if (next.has(destinationId)) next.delete(destinationId);
+  else next.add(destinationId);
   comparisonSelection.destinationIds = [...next];
-  renderComparisonDestinationChoices();
+  renderComparisonDestinationChoices({ autoSelect: false });
+  clearComparisonResults();
+}
+
+function selectAllComparisonDestinations() {
+  comparisonSelection.destinationIds = getComparisonAvailableDestinations().map(dest => dest.id);
+  renderComparisonDestinationChoices({ autoSelect: false });
+  clearComparisonResults();
+}
+
+function clearComparisonDestinations() {
+  comparisonSelection.destinationIds = [];
+  renderComparisonDestinationChoices({ autoSelect: false });
+  clearComparisonResults();
 }
 
 function clearComparisonResults() {
@@ -1732,7 +1890,7 @@ async function runComparison() {
     const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(selectedIndicators[0]));
     document.getElementById('compareChartTitle').textContent = `${selectedIndicators[0].name} · comparación entre destinos`;
     document.getElementById('compareChartNote').textContent = annualMeta.shortLabel;
-    document.getElementById('compareSummaryBadge').textContent = `${destinationIds.length} destinos`;
+    document.getElementById('compareSummaryBadge').textContent = `${selectedIndicators.length} destinos`;
 
     const table = document.getElementById('comparisonTable');
     const header = `<thead><tr><th>Destino</th>${years.map(year => `<th>${year}</th>`).join('')}</tr></thead>`;

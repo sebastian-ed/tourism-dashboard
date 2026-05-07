@@ -140,3 +140,15 @@ El bucket **Sin destino** ahora se puede gestionar desde admin:
 - **Eliminar “Sin destino”** borra completamente los indicadores sin destino y sus datos asociados.
 
 No requiere cambios de SQL.
+
+## Comparador más simple
+
+La comparación de destinos ahora muestra solo indicadores que existen en dos o más destinos. El selector ya no expone la clave/slug interna: muestra nombre limpio, unidad y cantidad de destinos disponibles.
+
+También se agregó:
+- buscador rápido de indicador comparable
+- agrupación visual por título agrupador
+- lista de destinos disponibles solo para el indicador elegido
+- botones para seleccionar todos o limpiar selección
+
+No requiere cambios de base de datos.
