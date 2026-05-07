@@ -152,3 +152,9 @@ También se agregó:
 - botones para seleccionar todos o limpiar selección
 
 No requiere cambios de base de datos.
+
+## Mejora de visualización de gráficos densos
+
+Cuando hay muchos años seleccionados, la app ahora muestra el tooltip de forma individual, tomando el punto más cercano al cursor. Esto evita que se corte una lista enorme de valores sobre el gráfico.
+
+También se oculta automáticamente la leyenda interna cuando hay demasiadas series, porque los años ya se controlan desde los chips superiores. El gráfico gana altura cuando hay muchas líneas para mejorar la lectura.

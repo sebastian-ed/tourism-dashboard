@@ -263,7 +263,10 @@ input, select, textarea { font-family: inherit; }
 }
 .chart-card-title { font-size: 13px; font-weight: 600; color: var(--text-subtle); letter-spacing: .02em; }
 .chart-card-note { font-size: 12px; color: var(--text-muted); }
-.chart-wrap { position: relative; height: 280px; }
+ .chart-wrap { position: relative; height: 280px; }
+.chart-wrap.has-many-series { height: 340px; }
+.chart-wrap.has-dense-series { height: 380px; }
+.chart-wrap canvas { display: block; }
 
 .table-card,
 .overview-card,
