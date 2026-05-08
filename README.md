@@ -170,3 +170,7 @@ La tabla del comparador permite ordenar los destinos por el año que el usuario 
 - los destinos sin dato para ese año quedan al final.
 
 Esta mejora es solo de visualización. No modifica registros, indicadores ni datos cargados.
+
+## Comparador: orden de tabla
+
+La tabla comparativa mantiene por defecto el orden original de selección. También permite elegir un año de referencia y decidir si se conserva ese orden original o si se ordena por rendimiento de mayor a menor o de menor a mayor. No modifica los datos cargados.

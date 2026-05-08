@@ -19,7 +19,7 @@ let selectedGridYears = [];
 let selectedGridCell = null;
 let comparisonSelection = { metricKey: '', destinationIds: [] };
 let currentComparisonTablePayload = null;
-let comparisonTableSort = { year: '', direction: 'desc' };
+let comparisonTableSort = { year: '', direction: 'original' };
 const groupCollapseState = { sidebar: {}, center: {} };
 let dragState = { indicatorId: '', destinationId: '' };
 let groupDragState = { destinationId: '', groupTitle: '' };
@@ -1843,14 +1843,18 @@ function resetComparisonTableSortForYears(years = []) {
   if (!availableYears.has(String(comparisonTableSort.year || ''))) {
     comparisonTableSort.year = '';
   }
-  if (!['asc', 'desc'].includes(comparisonTableSort.direction)) {
-    comparisonTableSort.direction = 'desc';
+  if (!['original', 'asc', 'desc'].includes(comparisonTableSort.direction)) {
+    comparisonTableSort.direction = 'original';
+  }
+  if (!comparisonTableSort.year) {
+    comparisonTableSort.direction = 'original';
   }
 }
 
 function handleComparisonSortChange() {
   comparisonTableSort.year = document.getElementById('comparisonSortYear')?.value || '';
-  comparisonTableSort.direction = document.getElementById('comparisonSortDirection')?.value || 'desc';
+  comparisonTableSort.direction = document.getElementById('comparisonSortDirection')?.value || 'original';
+  if (!comparisonTableSort.year) comparisonTableSort.direction = 'original';
   renderComparisonTable();
 }
 
@@ -1868,15 +1872,16 @@ function renderComparisonTableSortControls(payload) {
   controls.style.display = 'flex';
   controls.innerHTML = `
     <div class="comparison-sort-field">
-      <label class="form-label">Ordenar por año</label>
+      <label class="form-label">Año de referencia</label>
       <select id="comparisonSortYear" class="form-control comparison-sort-select" onchange="handleComparisonSortChange()">
-        <option value="" ${comparisonTableSort.year ? '' : 'selected'}>Orden original</option>
+        <option value="" ${comparisonTableSort.year ? '' : 'selected'}>Sin año específico</option>
         ${years.map(year => `<option value="${year}" ${String(comparisonTableSort.year) === String(year) ? 'selected' : ''}>${year}</option>`).join('')}
       </select>
     </div>
     <div class="comparison-sort-field">
       <label class="form-label">Criterio</label>
       <select id="comparisonSortDirection" class="form-control comparison-sort-select" onchange="handleComparisonSortChange()" ${comparisonTableSort.year ? '' : 'disabled'}>
+        <option value="original" ${comparisonTableSort.direction === 'original' ? 'selected' : ''}>Orden original</option>
         <option value="desc" ${comparisonTableSort.direction === 'desc' ? 'selected' : ''}>Mayor a menor</option>
         <option value="asc" ${comparisonTableSort.direction === 'asc' ? 'selected' : ''}>Menor a mayor</option>
       </select>
@@ -1893,9 +1898,10 @@ function getComparisonValueForSort(item, year) {
 function getSortedComparisonSeries(payload) {
   const baseSeries = (payload?.series || []).map((item, index) => ({ ...item, __originalIndex: index }));
   const sortYear = comparisonTableSort.year;
-  if (!sortYear) return baseSeries;
+  const sortDirection = comparisonTableSort.direction || 'original';
+  if (!sortYear || sortDirection === 'original') return baseSeries;
 
-  const directionFactor = comparisonTableSort.direction === 'asc' ? 1 : -1;
+  const directionFactor = sortDirection === 'asc' ? 1 : -1;
   return baseSeries.sort((a, b) => {
     const aValue = getComparisonValueForSort(a, sortYear);
     const bValue = getComparisonValueForSort(b, sortYear);
@@ -1918,16 +1924,17 @@ function renderComparisonTable() {
   const years = payload.years || [];
   const sortedSeries = getSortedComparisonSeries(payload);
   const activeSortYear = String(comparisonTableSort.year || '');
-  const sortArrow = comparisonTableSort.direction === 'asc' ? '↑' : '↓';
+  const isSortedByValue = activeSortYear && comparisonTableSort.direction !== 'original';
+  const sortArrow = comparisonTableSort.direction === 'asc' ? '↑' : comparisonTableSort.direction === 'desc' ? '↓' : '';
   renderComparisonTableSortControls(payload);
 
   const header = `<thead><tr><th>Destino</th>${years.map(year => {
     const isActive = String(year) === activeSortYear;
-    return `<th class="${isActive ? 'sorted-column' : ''}">${year}${isActive ? ` ${sortArrow}` : ''}</th>`;
+    return `<th class="${isActive ? 'sorted-column' : ''}">${year}${isActive && sortArrow ? ` ${sortArrow}` : ''}</th>`;
   }).join('')}</tr></thead>`;
 
   const rows = sortedSeries.map((item, rowIndex) => `
-    <tr class="${activeSortYear && rowIndex === 0 ? 'top-ranked-row' : ''}">
+    <tr class="${isSortedByValue && rowIndex === 0 ? 'top-ranked-row' : ''}">
       <td>${escapeHtml(item.destinationName)}</td>
       ${years.map(year => {
         const isActive = String(year) === activeSortYear;
@@ -2000,7 +2007,7 @@ async function runComparison() {
     document.getElementById('compareSummaryBadge').textContent = `${selectedIndicators.length} destinos`;
 
     currentComparisonTablePayload = { years, series, annualMeta };
-    comparisonTableSort = { year: '', direction: 'desc' };
+    comparisonTableSort = { year: '', direction: 'original' };
     renderComparisonTable();
 
     document.getElementById('compareEmpty').style.display = 'none';
