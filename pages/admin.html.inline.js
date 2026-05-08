@@ -1911,6 +1911,7 @@ function handleComparisonSortChange() {
   comparisonTableSort.direction = document.getElementById('comparisonSortDirection')?.value || 'original';
   if (!comparisonTableSort.year) comparisonTableSort.direction = 'original';
   renderComparisonTable();
+  renderComparisonChartFromPayload();
 }
 
 function renderComparisonTableSortControls(payload) {
@@ -1930,7 +1931,7 @@ function renderComparisonTableSortControls(payload) {
   controls.style.display = 'flex';
   controls.innerHTML = `
     <div class="comparison-sort-field comparison-measure-field">
-      <label class="form-label">Medida de la tabla</label>
+      <label class="form-label">Medida de tabla y gráfico</label>
       <select id="comparisonMeasure" class="form-control comparison-sort-select" onchange="handleComparisonSortChange()">
         ${measures.map(option => `<option value="${option.value}" ${comparisonTableSort.measure === option.value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
       </select>
@@ -1977,6 +1978,32 @@ function getSortedComparisonSeries(payload) {
     if (aValue === bValue) return a.__originalIndex - b.__originalIndex;
     return (aValue - bValue) * directionFactor;
   });
+}
+
+function buildComparisonChartSeries(payload) {
+  const years = payload?.years || [];
+  const sortedSeries = getSortedComparisonSeries(payload);
+  return sortedSeries.map(item => ({
+    label: item.destinationName,
+    values: years.map(year => getComparisonMeasureValue(item, year, comparisonTableSort.measure)),
+  }));
+}
+
+function renderComparisonChartFromPayload(payload = currentComparisonTablePayload) {
+  if (!payload) return;
+  resetComparisonTableSortForYears(payload.years || [], payload);
+  const activeMeasure = getComparisonMeasureMeta(comparisonTableSort.measure, payload);
+  const metricName = payload.indicatorName || payload.series?.[0]?.indicator?.name || 'Indicador';
+  renderComparisonChart('comparisonChart', {
+    years: payload.years || [],
+    series: buildComparisonChartSeries(payload),
+    unit: payload.unit || '',
+    measureLabel: activeMeasure.label,
+  });
+  const titleEl = document.getElementById('compareChartTitle');
+  const noteEl = document.getElementById('compareChartNote');
+  if (titleEl) titleEl.textContent = `${metricName} · comparación entre destinos`;
+  if (noteEl) noteEl.textContent = activeMeasure.label;
 }
 
 function renderComparisonTable() {
@@ -2054,24 +2081,18 @@ async function runComparison() {
     });
 
     const years = [...yearsSet].sort((a, b) => a - b);
-    const chartSeries = series.map(item => ({
-      label: item.destinationName,
-      values: years.map(year => item.yearlyStats?.[year]?.annualValue ?? null),
-    }));
-
-    renderComparisonChart('comparisonChart', {
-      years,
-      series: chartSeries,
-      unit: selectedIndicators[0]?.unit || '',
-    });
-
     const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(selectedIndicators[0]));
-    document.getElementById('compareChartTitle').textContent = `${selectedIndicators[0].name} · comparación entre destinos`;
-    document.getElementById('compareChartNote').textContent = annualMeta.shortLabel;
-    document.getElementById('compareSummaryBadge').textContent = `${selectedIndicators.length} destinos`;
 
-    currentComparisonTablePayload = { years, series, annualMeta };
+    currentComparisonTablePayload = {
+      years,
+      series,
+      annualMeta,
+      unit: selectedIndicators[0]?.unit || '',
+      indicatorName: selectedIndicators[0]?.name || 'Indicador',
+    };
     comparisonTableSort = { year: '', direction: 'original', measure: 'annualValue' };
+    renderComparisonChartFromPayload();
+    document.getElementById('compareSummaryBadge').textContent = `${selectedIndicators.length} destinos`;
     renderComparisonTable();
 
     document.getElementById('compareEmpty').style.display = 'none';

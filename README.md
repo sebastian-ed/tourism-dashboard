@@ -187,3 +187,8 @@ La tabla comparativa permite elegir qué medida mostrar por año:
 - desvío estándar mensual
 
 El desvío estándar queda disponible como lectura avanzada de variabilidad/estacionalidad, pero no es la medida recomendada para ranking principal.
+
+## Comparador: medidas también en gráficos
+
+La medida seleccionada en la tabla comparativa ahora también controla el gráfico de comparación.
+Podés graficar la medida anual aplicada, promedio mensual, mediana, máximo, mínimo o desvío estándar mensual sin alterar los datos cargados.

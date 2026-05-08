@@ -232,6 +232,7 @@ function renderComparisonChart(canvasId, comparisonPayload) {
           bodyColor: '#94a3b8',
           callbacks: {
             label: (ctx) => ` ${ctx.dataset.label}: ${formatNumber(ctx.parsed.y)} ${comparisonPayload.unit || ''}`,
+            afterLabel: () => comparisonPayload.measureLabel ? ` Medida: ${comparisonPayload.measureLabel}` : '',
           }
         },
       },
