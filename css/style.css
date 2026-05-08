@@ -1166,3 +1166,56 @@ input, select, textarea { font-family: inherit; }
 .checkbox-inline input {
   accent-color: var(--accent);
 }
+
+
+/* Comparador: orden de tabla comparativa */
+.comparison-table-header {
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.comparison-table-tools {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.comparison-sort-field {
+  display: grid;
+  gap: 4px;
+  min-width: 130px;
+}
+.comparison-sort-field .form-label {
+  margin: 0;
+  font-size: 9px;
+}
+.comparison-sort-select {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.data-table th.sorted-column,
+.data-table td.sorted-column {
+  background: rgba(59,130,246,.08);
+  color: var(--text-primary);
+}
+.data-table tr.top-ranked-row td {
+  background: rgba(16,185,129,.05);
+}
+.data-table tr.top-ranked-row td.sorted-column {
+  color: var(--success);
+  font-weight: 700;
+}
+@media (max-width: 760px) {
+  .comparison-table-header,
+  .comparison-table-tools {
+    align-items: stretch;
+  }
+  .comparison-table-tools {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .comparison-sort-field {
+    flex: 1 1 140px;
+  }
+}

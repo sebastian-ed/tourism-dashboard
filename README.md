@@ -158,3 +158,15 @@ No requiere cambios de base de datos.
 Cuando hay muchos años seleccionados, la app ahora muestra el tooltip de forma individual, tomando el punto más cercano al cursor. Esto evita que se corte una lista enorme de valores sobre el gráfico.
 
 También se oculta automáticamente la leyenda interna cuando hay demasiadas series, porque los años ya se controlan desde los chips superiores. El gráfico gana altura cuando hay muchas líneas para mejorar la lectura.
+
+
+## Ordenamiento de tabla comparativa
+
+La tabla del comparador permite ordenar los destinos por el año que el usuario elija:
+
+- orden original por defecto;
+- mayor a menor;
+- menor a mayor;
+- los destinos sin dato para ese año quedan al final.
+
+Esta mejora es solo de visualización. No modifica registros, indicadores ni datos cargados.

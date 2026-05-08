@@ -10,6 +10,8 @@ let currentDataMetaByYear = {};
 let currentYearlyStats = {};
 let visibleYears = [];
 let comparisonSelection = { metricKey: '', destinationIds: [] };
+let currentComparisonTablePayload = null;
+let comparisonTableSort = { year: '', direction: 'desc' };
 const groupCollapseState = { sidebar: {}, center: {} };
 const overviewScrollState = {};
 
@@ -819,10 +821,115 @@ function clearComparisonDestinations() {
 
 function clearComparisonResults() {
   destroyComparisonChart();
+  currentComparisonTablePayload = null;
+  const sortControls = document.getElementById('comparisonTableSortControls');
+  if (sortControls) sortControls.style.display = 'none';
   document.getElementById('compareEmpty').style.display = 'block';
   document.getElementById('compareResults').style.display = 'none';
   document.getElementById('compareSummaryBadge').textContent = 'Sin comparación';
 }
+
+function resetComparisonTableSortForYears(years = []) {
+  const availableYears = new Set((years || []).map(year => String(year)));
+  if (!availableYears.has(String(comparisonTableSort.year || ''))) {
+    comparisonTableSort.year = '';
+  }
+  if (!['asc', 'desc'].includes(comparisonTableSort.direction)) {
+    comparisonTableSort.direction = 'desc';
+  }
+}
+
+function handleComparisonSortChange() {
+  comparisonTableSort.year = document.getElementById('comparisonSortYear')?.value || '';
+  comparisonTableSort.direction = document.getElementById('comparisonSortDirection')?.value || 'desc';
+  renderComparisonTable();
+}
+
+function renderComparisonTableSortControls(payload) {
+  const controls = document.getElementById('comparisonTableSortControls');
+  if (!controls) return;
+  const years = payload?.years || [];
+  resetComparisonTableSortForYears(years);
+  if (!years.length) {
+    controls.style.display = 'none';
+    controls.innerHTML = '';
+    return;
+  }
+
+  controls.style.display = 'flex';
+  controls.innerHTML = `
+    <div class="comparison-sort-field">
+      <label class="form-label">Ordenar por año</label>
+      <select id="comparisonSortYear" class="form-control comparison-sort-select" onchange="handleComparisonSortChange()">
+        <option value="" ${comparisonTableSort.year ? '' : 'selected'}>Orden original</option>
+        ${years.map(year => `<option value="${year}" ${String(comparisonTableSort.year) === String(year) ? 'selected' : ''}>${year}</option>`).join('')}
+      </select>
+    </div>
+    <div class="comparison-sort-field">
+      <label class="form-label">Criterio</label>
+      <select id="comparisonSortDirection" class="form-control comparison-sort-select" onchange="handleComparisonSortChange()" ${comparisonTableSort.year ? '' : 'disabled'}>
+        <option value="desc" ${comparisonTableSort.direction === 'desc' ? 'selected' : ''}>Mayor a menor</option>
+        <option value="asc" ${comparisonTableSort.direction === 'asc' ? 'selected' : ''}>Menor a mayor</option>
+      </select>
+    </div>
+  `;
+}
+
+function getComparisonValueForSort(item, year) {
+  if (!year) return null;
+  const value = item?.yearlyStats?.[Number(year)]?.annualValue;
+  return value === null || value === undefined || isNaN(Number(value)) ? null : Number(value);
+}
+
+function getSortedComparisonSeries(payload) {
+  const baseSeries = (payload?.series || []).map((item, index) => ({ ...item, __originalIndex: index }));
+  const sortYear = comparisonTableSort.year;
+  if (!sortYear) return baseSeries;
+
+  const directionFactor = comparisonTableSort.direction === 'asc' ? 1 : -1;
+  return baseSeries.sort((a, b) => {
+    const aValue = getComparisonValueForSort(a, sortYear);
+    const bValue = getComparisonValueForSort(b, sortYear);
+    const aMissing = aValue === null;
+    const bMissing = bValue === null;
+
+    if (aMissing && bMissing) return a.__originalIndex - b.__originalIndex;
+    if (aMissing) return 1;
+    if (bMissing) return -1;
+    if (aValue === bValue) return a.__originalIndex - b.__originalIndex;
+    return (aValue - bValue) * directionFactor;
+  });
+}
+
+function renderComparisonTable() {
+  const payload = currentComparisonTablePayload;
+  const table = document.getElementById('comparisonTable');
+  if (!payload || !table) return;
+
+  const years = payload.years || [];
+  const sortedSeries = getSortedComparisonSeries(payload);
+  const activeSortYear = String(comparisonTableSort.year || '');
+  const sortArrow = comparisonTableSort.direction === 'asc' ? '↑' : '↓';
+  renderComparisonTableSortControls(payload);
+
+  const header = `<thead><tr><th>Destino</th>${years.map(year => {
+    const isActive = String(year) === activeSortYear;
+    return `<th class="${isActive ? 'sorted-column' : ''}">${year}${isActive ? ` ${sortArrow}` : ''}</th>`;
+  }).join('')}</tr></thead>`;
+
+  const rows = sortedSeries.map((item, rowIndex) => `
+    <tr class="${activeSortYear && rowIndex === 0 ? 'top-ranked-row' : ''}">
+      <td>${escapeHtml(item.destinationName)}</td>
+      ${years.map(year => {
+        const isActive = String(year) === activeSortYear;
+        return `<td class="${isActive ? 'sorted-column' : ''}">${formatNumber(item.yearlyStats?.[year]?.annualValue)}</td>`;
+      }).join('')}
+    </tr>
+  `).join('');
+
+  table.innerHTML = header + `<tbody>${rows}</tbody>`;
+}
+
 
 async function runComparison() {
   const metricKey = comparisonSelection.metricKey;
@@ -883,15 +990,9 @@ async function runComparison() {
     document.getElementById('compareChartNote').textContent = annualMeta.shortLabel;
     document.getElementById('compareSummaryBadge').textContent = `${selectedIndicators.length} destinos`;
 
-    const table = document.getElementById('comparisonTable');
-    const header = `<thead><tr><th>Destino</th>${years.map(year => `<th>${year}</th>`).join('')}</tr></thead>`;
-    const rows = series.map(item => `
-      <tr>
-        <td>${escapeHtml(item.destinationName)}</td>
-        ${years.map(year => `<td>${formatNumber(item.yearlyStats?.[year]?.annualValue)}</td>`).join('')}
-      </tr>
-    `).join('');
-    table.innerHTML = header + `<tbody>${rows}</tbody>`;
+    currentComparisonTablePayload = { years, series, annualMeta };
+    comparisonTableSort = { year: '', direction: 'desc' };
+    renderComparisonTable();
 
     document.getElementById('compareEmpty').style.display = 'none';
     document.getElementById('compareResults').style.display = 'block';
