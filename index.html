@@ -155,8 +155,6 @@
         </div>
       </div>
 
-      <div class="kpi-grid" id="kpiGrid"></div>
-
       <div class="year-filter-card">
         <div class="year-filter-header">
           <div>
@@ -170,6 +168,8 @@
         </div>
         <div id="yearFilterList" class="year-filter-list"></div>
       </div>
+
+      <div class="kpi-grid" id="kpiGrid"></div>
 
       <div class="charts-grid">
         <div class="chart-card">
@@ -679,26 +679,55 @@ function renderDashboard() {
   renderYearFilter();
 
   const allVals = Object.values(currentDataByYear).flat().filter(v => v !== null && !isNaN(v)).map(Number);
-  const gs = calcStats(allVals);
-  const lastYear = years[years.length - 1];
-  const lastStats = currentYearlyStats[lastYear];
+  const globalStats = calcStats(allVals);
+  const selectedVals = getValuesForYears(currentDataByYear, shownYears);
+  const selectedStats = calcStats(selectedVals);
+  const selectedAnnualStats = calcStats(getAnnualValuesForYears(currentYearlyStats, shownYears));
+  const selectedLabel = getSelectedYearsLabel(shownYears, years);
+  const singleSelectedYear = shownYears.length === 1 ? shownYears[0] : null;
+  const selectedAnnualValue = singleSelectedYear
+    ? currentYearlyStats[singleSelectedYear]?.annualValue
+    : selectedAnnualStats?.mean;
 
-  const kpis = [
-    { label: 'Promedio mensual', value: formatNumber(gs?.mean), sub: 'Histórico global', accent: 'var(--accent)' },
-    { label: `${annualMeta.shortLabel} ${lastYear || '—'}`, value: formatNumber(lastStats?.annualValue), change: lastStats?.yoyAnnual, accent: '#10B981' },
-    { label: 'Máximo mensual', value: formatNumber(gs?.max), sub: 'Histórico', accent: '#A855F7' },
-    { label: 'Mínimo mensual', value: formatNumber(gs?.min), sub: 'Histórico', accent: '#F97316' },
-    { label: 'Mediana mensual', value: formatNumber(gs?.median), sub: 'Histórico global', accent: '#06B6D4' },
-    { label: 'Desvío estándar', value: formatNumber(gs?.stdDev), sub: 'Variabilidad', accent: '#EAB308' },
+  const selectedKpis = [
+    { label: singleSelectedYear ? `${annualMeta.shortLabel} ${singleSelectedYear}` : `Promedio ${annualMeta.shortLabel.toLowerCase()}`, value: formatNumber(selectedAnnualValue), sub: selectedLabel, accent: '#10B981' },
+    { label: 'Promedio mensual', value: formatNumber(selectedStats?.mean), sub: selectedLabel, accent: 'var(--accent)' },
+    { label: 'Mediana mensual', value: formatNumber(selectedStats?.median), sub: selectedLabel, accent: '#06B6D4' },
+    { label: 'Máximo mensual', value: formatNumber(selectedStats?.max), sub: selectedLabel, accent: '#A855F7' },
+    { label: 'Mínimo mensual', value: formatNumber(selectedStats?.min), sub: selectedLabel, accent: '#F97316' },
+    { label: 'Desvío estándar', value: formatNumber(selectedStats?.stdDev), sub: 'Serie seleccionada', accent: '#EAB308' },
   ];
 
-  document.getElementById('kpiGrid').innerHTML = kpis.map(k => `
+  const globalKpis = [
+    { label: 'Promedio mensual global', value: formatNumber(globalStats?.mean), sub: 'Todos los años cargados', accent: 'var(--accent)' },
+    { label: 'Mediana global', value: formatNumber(globalStats?.median), sub: 'Todos los años cargados', accent: '#06B6D4' },
+    { label: 'Máximo histórico', value: formatNumber(globalStats?.max), sub: 'Toda la serie', accent: '#A855F7' },
+    { label: 'Mínimo histórico', value: formatNumber(globalStats?.min), sub: 'Toda la serie', accent: '#F97316' },
+    { label: 'Desvío estándar global', value: formatNumber(globalStats?.stdDev), sub: 'Variabilidad total', accent: '#EAB308' },
+    { label: 'Años cargados', value: years.length ? String(years.length) : '-', sub: years.length ? `${years[0]}–${years[years.length - 1]}` : 'Sin serie', accent: '#10B981' },
+  ];
+
+  const renderKpiCard = (k) => `
     <div class="kpi-card" style="--accent-color:${k.accent}">
       <div class="kpi-label">${k.label}</div>
       <div class="kpi-value">${k.value}</div>
       ${k.change !== undefined && k.change !== null ? `<div class="kpi-change ${k.change >= 0 ? 'up' : 'down'}">${k.change >= 0 ? '▲' : '▼'} ${formatPct(k.change)}</div>` : k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
     </div>
-  `).join('');
+  `;
+
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="kpi-grid-section-title kpi-grid-full">
+      <span>Medidas de la selección visible</span>
+      <small>${escapeHtml(selectedLabel)}</small>
+    </div>
+    ${selectedKpis.map(renderKpiCard).join('')}
+    ${renderSelectedYearStatsTable(shownYears, currentYearlyStats, annualMeta)}
+    <div class="kpi-grid-section-title kpi-grid-full">
+      <span>Histórico global del indicador</span>
+      <small>Calculado con todos los años cargados, aunque estén ocultos en el gráfico.</small>
+    </div>
+    ${globalKpis.map(renderKpiCard).join('')}
+  `;
 
   destroyCharts();
   const filteredDataByYear = filterDataByYear(currentDataByYear, shownYears);
@@ -751,6 +780,93 @@ function renderDashboard() {
   mt.innerHTML = header + `<tbody>${rows}</tbody>`;
 }
 
+
+function getValuesForYears(dataByYear, years) {
+  const selected = new Set((years || []).map(Number));
+  return Object.entries(dataByYear || {})
+    .filter(([year]) => selected.has(Number(year)))
+    .flatMap(([, values]) => values || [])
+    .filter(value => value !== null && value !== undefined && !isNaN(value))
+    .map(Number);
+}
+
+function getAnnualValuesForYears(yearlyStats, years) {
+  return (years || [])
+    .map(year => yearlyStats?.[year]?.annualValue)
+    .filter(value => value !== null && value !== undefined && !isNaN(value))
+    .map(Number);
+}
+
+function getSelectedYearsLabel(selectedYears, availableYears) {
+  if (!selectedYears.length) return 'Sin años seleccionados';
+  if (selectedYears.length === 1) return `Año ${selectedYears[0]}`;
+  if (selectedYears.length === availableYears.length) return 'Serie completa visible';
+  const first = selectedYears[0];
+  const last = selectedYears[selectedYears.length - 1];
+  return `${selectedYears.length} años seleccionados · ${first}–${last}`;
+}
+
+function renderSelectedYearStatsTable(selectedYears, yearlyStats, annualMeta) {
+  if (!selectedYears.length) {
+    return `
+      <div class="selected-year-stats-card kpi-grid-full">
+        <div class="selected-year-stats-header">
+          <div>
+            <h3>Medidas por año seleccionado</h3>
+            <p>Activá uno o varios años para ver sus medidas individuales.</p>
+          </div>
+        </div>
+        <div class="selected-year-empty">No hay años seleccionados.</div>
+      </div>
+    `;
+  }
+
+  const rows = selectedYears.map(year => {
+    const stats = yearlyStats?.[year] || {};
+    const yoy = stats?.yoyAnnual;
+    return `
+      <tr>
+        <td><strong>${year}</strong></td>
+        <td>${formatNumber(stats?.annualValue)}</td>
+        <td>${formatNumber(stats?.mean)}</td>
+        <td>${formatNumber(stats?.median)}</td>
+        <td>${formatNumber(stats?.max)}</td>
+        <td>${formatNumber(stats?.min)}</td>
+        <td>${formatNumber(stats?.stdDev)}</td>
+        <td class="${yoy !== undefined && yoy !== null ? (yoy >= 0 ? 'positive' : 'negative') : ''}">${yoy !== undefined && yoy !== null ? formatPct(yoy) : '-'}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <div class="selected-year-stats-card kpi-grid-full">
+      <div class="selected-year-stats-header">
+        <div>
+          <h3>Medidas por año seleccionado</h3>
+          <p>Lectura individual de los años activos en los chips superiores.</p>
+        </div>
+        <span class="badge badge-blue">${selectedYears.length} año${selectedYears.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div class="selected-year-stats-table-wrap">
+        <table class="data-table selected-year-stats-table">
+          <thead>
+            <tr>
+              <th>Año</th>
+              <th>${escapeHtml(annualMeta.shortLabel)}</th>
+              <th>Promedio mensual</th>
+              <th>Mediana</th>
+              <th>Máximo</th>
+              <th>Mínimo</th>
+              <th>Desvío Std</th>
+              <th>Var. interanual</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
 
 function renderMonthlyDataCell(value, meta) {
   const title = getDataPointAnnotationText(meta);

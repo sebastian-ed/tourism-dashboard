@@ -192,3 +192,12 @@ El desvío estándar queda disponible como lectura avanzada de variabilidad/esta
 
 La medida seleccionada en la tabla comparativa ahora también controla el gráfico de comparación.
 Podés graficar la medida anual aplicada, promedio mensual, mediana, máximo, mínimo o desvío estándar mensual sin alterar los datos cargados.
+
+## v2.4.7.6 · Medidas por años seleccionados
+
+En la vista individual del indicador, los chips de años ahora también controlan el bloque de medidas:
+
+- muestra KPIs de la serie visible seleccionada
+- muestra una tabla con medidas individuales por cada año activo
+- mantiene un bloque separado de histórico global con todos los años cargados
+- no modifica datos, fórmulas ni estructura de Supabase

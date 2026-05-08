@@ -1239,3 +1239,70 @@ input, select, textarea { font-family: inherit; }
     max-width: none;
   }
 }
+
+/* v2.4.7.6 · KPIs dinámicos por selección de años */
+.kpi-grid-full {
+  grid-column: 1 / -1;
+}
+.kpi-grid-section-title {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 2px 0;
+  margin-top: 2px;
+}
+.kpi-grid-section-title span {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+.kpi-grid-section-title small {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: right;
+}
+.selected-year-stats-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin: 4px 0 8px;
+}
+.selected-year-stats-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-light);
+}
+.selected-year-stats-header h3 {
+  font-size: 14px;
+  font-weight: 700;
+}
+.selected-year-stats-header p,
+.selected-year-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.selected-year-empty {
+  padding: 18px 20px;
+}
+.selected-year-stats-table-wrap {
+  overflow-x: auto;
+}
+.selected-year-stats-table th,
+.selected-year-stats-table td {
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .kpi-grid-section-title,
+  .selected-year-stats-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .kpi-grid-section-title small {
+    text-align: left;
+  }
+}
