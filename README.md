@@ -174,3 +174,16 @@ Esta mejora es solo de visualización. No modifica registros, indicadores ni dat
 ## Comparador: orden de tabla
 
 La tabla comparativa mantiene por defecto el orden original de selección. También permite elegir un año de referencia y decidir si se conserva ese orden original o si se ordena por rendimiento de mayor a menor o de menor a mayor. No modifica los datos cargados.
+
+## Comparador: medidas de tabla
+
+La tabla comparativa permite elegir qué medida mostrar por año:
+
+- medida anual aplicada por el indicador
+- promedio mensual
+- mediana mensual
+- máximo mensual del año
+- mínimo mensual del año
+- desvío estándar mensual
+
+El desvío estándar queda disponible como lectura avanzada de variabilidad/estacionalidad, pero no es la medida recomendada para ranking principal.

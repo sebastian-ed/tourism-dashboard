@@ -11,7 +11,7 @@ let currentYearlyStats = {};
 let visibleYears = [];
 let comparisonSelection = { metricKey: '', destinationIds: [] };
 let currentComparisonTablePayload = null;
-let comparisonTableSort = { year: '', direction: 'original' };
+let comparisonTableSort = { year: '', direction: 'original', measure: 'annualValue' };
 const groupCollapseState = { sidebar: {}, center: {} };
 const overviewScrollState = {};
 
@@ -829,7 +829,57 @@ function clearComparisonResults() {
   document.getElementById('compareSummaryBadge').textContent = 'Sin comparación';
 }
 
-function resetComparisonTableSortForYears(years = []) {
+function getComparisonMeasureOptions(payload = null) {
+  const annualLabel = payload?.annualMeta?.shortLabel || 'Medida anual aplicada';
+  return [
+    {
+      value: 'annualValue',
+      label: annualLabel,
+      help: 'Respeta la regla anual configurada para el indicador.',
+    },
+    {
+      value: 'mean',
+      label: 'Promedio mensual',
+      help: 'Promedio simple de los meses cargados dentro de cada año.',
+    },
+    {
+      value: 'median',
+      label: 'Mediana mensual',
+      help: 'Valor central del año. Útil cuando hay meses atípicos.',
+    },
+    {
+      value: 'max',
+      label: 'Máximo mensual del año',
+      help: 'Mayor valor mensual registrado en ese año.',
+    },
+    {
+      value: 'min',
+      label: 'Mínimo mensual del año',
+      help: 'Menor valor mensual registrado en ese año.',
+    },
+    {
+      value: 'stdDev',
+      label: 'Desvío estándar mensual',
+      help: 'Medida avanzada de variabilidad. Útil para estacionalidad; no conviene como ranking principal.',
+    },
+  ];
+}
+
+function getComparisonMeasureMeta(measure, payload = null) {
+  const options = getComparisonMeasureOptions(payload);
+  return options.find(option => option.value === measure) || options[0];
+}
+
+function getComparisonMeasureValue(item, year, measure = comparisonTableSort.measure) {
+  if (!year) return null;
+  const stats = item?.yearlyStats?.[Number(year)];
+  if (!stats) return null;
+  const key = measure || 'annualValue';
+  const value = stats?.[key];
+  return value === null || value === undefined || isNaN(Number(value)) ? null : Number(value);
+}
+
+function resetComparisonTableSortForYears(years = [], payload = null) {
   const availableYears = new Set((years || []).map(year => String(year)));
   if (!availableYears.has(String(comparisonTableSort.year || ''))) {
     comparisonTableSort.year = '';
@@ -840,9 +890,14 @@ function resetComparisonTableSortForYears(years = []) {
   if (!comparisonTableSort.year) {
     comparisonTableSort.direction = 'original';
   }
+  const availableMeasures = new Set(getComparisonMeasureOptions(payload).map(option => option.value));
+  if (!availableMeasures.has(comparisonTableSort.measure)) {
+    comparisonTableSort.measure = 'annualValue';
+  }
 }
 
 function handleComparisonSortChange() {
+  comparisonTableSort.measure = document.getElementById('comparisonMeasure')?.value || 'annualValue';
   comparisonTableSort.year = document.getElementById('comparisonSortYear')?.value || '';
   comparisonTableSort.direction = document.getElementById('comparisonSortDirection')?.value || 'original';
   if (!comparisonTableSort.year) comparisonTableSort.direction = 'original';
@@ -853,15 +908,24 @@ function renderComparisonTableSortControls(payload) {
   const controls = document.getElementById('comparisonTableSortControls');
   if (!controls) return;
   const years = payload?.years || [];
-  resetComparisonTableSortForYears(years);
+  resetComparisonTableSortForYears(years, payload);
   if (!years.length) {
     controls.style.display = 'none';
     controls.innerHTML = '';
     return;
   }
 
+  const measures = getComparisonMeasureOptions(payload);
+  const activeMeasure = getComparisonMeasureMeta(comparisonTableSort.measure, payload);
+
   controls.style.display = 'flex';
   controls.innerHTML = `
+    <div class="comparison-sort-field comparison-measure-field">
+      <label class="form-label">Medida de la tabla</label>
+      <select id="comparisonMeasure" class="form-control comparison-sort-select" onchange="handleComparisonSortChange()">
+        ${measures.map(option => `<option value="${option.value}" ${comparisonTableSort.measure === option.value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
+      </select>
+    </div>
     <div class="comparison-sort-field">
       <label class="form-label">Año de referencia</label>
       <select id="comparisonSortYear" class="form-control comparison-sort-select" onchange="handleComparisonSortChange()">
@@ -877,13 +941,12 @@ function renderComparisonTableSortControls(payload) {
         <option value="asc" ${comparisonTableSort.direction === 'asc' ? 'selected' : ''}>Menor a mayor</option>
       </select>
     </div>
+    <div class="comparison-measure-note">${escapeHtml(activeMeasure.help)}</div>
   `;
 }
 
 function getComparisonValueForSort(item, year) {
-  if (!year) return null;
-  const value = item?.yearlyStats?.[Number(year)]?.annualValue;
-  return value === null || value === undefined || isNaN(Number(value)) ? null : Number(value);
+  return getComparisonMeasureValue(item, year, comparisonTableSort.measure);
 }
 
 function getSortedComparisonSeries(payload) {
@@ -915,6 +978,7 @@ function renderComparisonTable() {
   const years = payload.years || [];
   const sortedSeries = getSortedComparisonSeries(payload);
   const activeSortYear = String(comparisonTableSort.year || '');
+  const activeMeasure = getComparisonMeasureMeta(comparisonTableSort.measure, payload);
   const isSortedByValue = activeSortYear && comparisonTableSort.direction !== 'original';
   const sortArrow = comparisonTableSort.direction === 'asc' ? '↑' : comparisonTableSort.direction === 'desc' ? '↓' : '';
   renderComparisonTableSortControls(payload);
@@ -929,7 +993,7 @@ function renderComparisonTable() {
       <td>${escapeHtml(item.destinationName)}</td>
       ${years.map(year => {
         const isActive = String(year) === activeSortYear;
-        return `<td class="${isActive ? 'sorted-column' : ''}">${formatNumber(item.yearlyStats?.[year]?.annualValue)}</td>`;
+        return `<td class="${isActive ? 'sorted-column' : ''}" title="${escapeHtml(activeMeasure.label)} · ${year}">${formatNumber(getComparisonMeasureValue(item, year, activeMeasure.value))}</td>`;
       }).join('')}
     </tr>
   `).join('');
@@ -998,7 +1062,7 @@ async function runComparison() {
     document.getElementById('compareSummaryBadge').textContent = `${selectedIndicators.length} destinos`;
 
     currentComparisonTablePayload = { years, series, annualMeta };
-    comparisonTableSort = { year: '', direction: 'original' };
+    comparisonTableSort = { year: '', direction: 'original', measure: 'annualValue' };
     renderComparisonTable();
 
     document.getElementById('compareEmpty').style.display = 'none';
