@@ -201,3 +201,18 @@ En la vista individual del indicador, los chips de años ahora también controla
 - muestra una tabla con medidas individuales por cada año activo
 - mantiene un bloque separado de histórico global con todos los años cargados
 - no modifica datos, fórmulas ni estructura de Supabase
+
+## KPIs dinámicos por años visibles
+
+En la vista individual de cada indicador, los chips de años también controlan las medidas/KPIs.
+
+La primera tarjeta usa la regla anual configurada para el indicador:
+
+- `sum`: muestra el total del año o la suma de los años visibles.
+- `average`: muestra el promedio mensual del año o de la selección visible.
+- `last_value`: muestra el último valor con dato.
+- `max` / `min`: muestra el máximo o mínimo mensual del período visible.
+- `ratio_of_sums`: recalcula numerador / denominador × multiplicador con los años visibles.
+- `none`: mantiene la medida principal oculta.
+
+Esto permite que indicadores como viajeros, plazas ocupadas o habitaciones ocupadas muestren totales anuales, mientras que tasas, ocupación y estadía respetan su fórmula metodológica.

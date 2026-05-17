@@ -249,6 +249,7 @@ let currentIndicator = null;
 let currentDataByYear = {};
 let currentDataMetaByYear = {};
 let currentYearlyStats = {};
+let currentRelatedSeriesMap = {};
 let visibleYears = [];
 let comparisonSelection = { metricKey: '', destinationIds: [] };
 let currentComparisonTablePayload = null;
@@ -636,8 +637,8 @@ async function selectIndicator(id) {
     renderSidebar();
     currentDataByYear = buildDataByYear(currentPoints);
     currentDataMetaByYear = buildDataPointMetaByYear(currentPoints);
-    const relatedSeriesMap = buildRelatedSeriesMapForDestination(currentIndicator, destinationIndicators, dataByIndicator);
-    currentYearlyStats = calcYearlyStats(currentDataByYear, { indicator: currentIndicator, relatedSeriesMap });
+    currentRelatedSeriesMap = buildRelatedSeriesMapForDestination(currentIndicator, destinationIndicators, dataByIndicator);
+    currentYearlyStats = calcYearlyStats(currentDataByYear, { indicator: currentIndicator, relatedSeriesMap: currentRelatedSeriesMap });
     visibleYears = getAvailableYears();
     renderDashboard();
     document.getElementById('mainEmpty').style.display = 'none';
@@ -682,15 +683,12 @@ function renderDashboard() {
   const globalStats = calcStats(allVals);
   const selectedVals = getValuesForYears(currentDataByYear, shownYears);
   const selectedStats = calcStats(selectedVals);
-  const selectedAnnualStats = calcStats(getAnnualValuesForYears(currentYearlyStats, shownYears));
   const selectedLabel = getSelectedYearsLabel(shownYears, years);
-  const singleSelectedYear = shownYears.length === 1 ? shownYears[0] : null;
-  const selectedAnnualValue = singleSelectedYear
-    ? currentYearlyStats[singleSelectedYear]?.annualValue
-    : selectedAnnualStats?.mean;
+  const selectedAppliedMetric = calculateAppliedMetricForYears(currentIndicator, currentDataByYear, currentYearlyStats, shownYears, currentRelatedSeriesMap);
+  const globalAppliedMetric = calculateAppliedMetricForYears(currentIndicator, currentDataByYear, currentYearlyStats, years, currentRelatedSeriesMap, { scope: 'global' });
 
   const selectedKpis = [
-    { label: singleSelectedYear ? `${annualMeta.shortLabel} ${singleSelectedYear}` : `Promedio ${annualMeta.shortLabel.toLowerCase()}`, value: formatNumber(selectedAnnualValue), sub: selectedLabel, accent: '#10B981' },
+    { label: selectedAppliedMetric.label, value: formatNumber(selectedAppliedMetric.value), sub: selectedAppliedMetric.sub || selectedLabel, accent: '#10B981' },
     { label: 'Promedio mensual', value: formatNumber(selectedStats?.mean), sub: selectedLabel, accent: 'var(--accent)' },
     { label: 'Mediana mensual', value: formatNumber(selectedStats?.median), sub: selectedLabel, accent: '#06B6D4' },
     { label: 'Máximo mensual', value: formatNumber(selectedStats?.max), sub: selectedLabel, accent: '#A855F7' },
@@ -699,12 +697,12 @@ function renderDashboard() {
   ];
 
   const globalKpis = [
+    { label: globalAppliedMetric.label, value: formatNumber(globalAppliedMetric.value), sub: globalAppliedMetric.sub || 'Todos los años cargados', accent: '#10B981' },
     { label: 'Promedio mensual global', value: formatNumber(globalStats?.mean), sub: 'Todos los años cargados', accent: 'var(--accent)' },
     { label: 'Mediana global', value: formatNumber(globalStats?.median), sub: 'Todos los años cargados', accent: '#06B6D4' },
     { label: 'Máximo histórico', value: formatNumber(globalStats?.max), sub: 'Toda la serie', accent: '#A855F7' },
     { label: 'Mínimo histórico', value: formatNumber(globalStats?.min), sub: 'Toda la serie', accent: '#F97316' },
-    { label: 'Desvío estándar global', value: formatNumber(globalStats?.stdDev), sub: 'Variabilidad total', accent: '#EAB308' },
-    { label: 'Años cargados', value: years.length ? String(years.length) : '-', sub: years.length ? `${years[0]}–${years[years.length - 1]}` : 'Sin serie', accent: '#10B981' },
+    { label: 'Años cargados', value: years.length ? String(years.length) : '-', sub: years.length ? `${years[0]}–${years[years.length - 1]}` : 'Sin serie', accent: '#EAB308' },
   ];
 
   const renderKpiCard = (k) => `
@@ -795,6 +793,114 @@ function getAnnualValuesForYears(yearlyStats, years) {
     .map(year => yearlyStats?.[year]?.annualValue)
     .filter(value => value !== null && value !== undefined && !isNaN(value))
     .map(Number);
+}
+
+
+function calculateAppliedMetricForYears(indicator, dataByYear, yearlyStats, selectedYears, relatedSeriesMap = {}, options = {}) {
+  const years = [...new Set((selectedYears || []).map(Number).filter(Number.isFinite))].sort((a, b) => a - b);
+  const annualMeta = getAnnualCalcMeta(getIndicatorCalcMode(indicator));
+  const mode = getIndicatorCalcMode(indicator);
+  const values = getValuesForYears(dataByYear, years);
+  const stats = calcStats(values);
+  const singleYear = years.length === 1 ? years[0] : null;
+  const isGlobal = options.scope === 'global';
+  const periodLabel = singleYear ? `Año ${singleYear}` : getSelectedYearsLabel(years, getAvailableYears());
+
+  if (!years.length) {
+    return {
+      label: annualMeta.shortLabel,
+      value: null,
+      sub: 'Sin años seleccionados',
+    };
+  }
+
+  if (singleYear) {
+    return {
+      label: `${annualMeta.shortLabel} ${singleYear}`,
+      value: yearlyStats?.[singleYear]?.annualValue ?? null,
+      sub: getAppliedMetricHelpText(mode, true),
+    };
+  }
+
+  switch (mode) {
+    case 'sum':
+      return {
+        label: isGlobal ? 'Total histórico' : 'Total de la selección',
+        value: stats?.sum ?? null,
+        sub: isGlobal ? 'Suma de todos los meses cargados' : 'Suma de los meses visibles',
+      };
+    case 'average':
+      return {
+        label: isGlobal ? 'Promedio aplicado global' : 'Promedio de la selección',
+        value: stats?.mean ?? null,
+        sub: isGlobal ? 'Promedio mensual de toda la serie' : 'Promedio mensual de los años visibles',
+      };
+    case 'last_value':
+      return {
+        label: isGlobal ? 'Último valor histórico' : 'Último valor de la selección',
+        value: getLastNonNull(values),
+        sub: isGlobal ? 'Último mes con dato de toda la serie' : 'Último mes con dato entre los años visibles',
+      };
+    case 'max':
+      return {
+        label: isGlobal ? 'Máximo histórico aplicado' : 'Máximo de la selección',
+        value: stats?.max ?? null,
+        sub: isGlobal ? 'Mayor valor mensual de toda la serie' : 'Mayor valor mensual visible',
+      };
+    case 'min':
+      return {
+        label: isGlobal ? 'Mínimo histórico aplicado' : 'Mínimo de la selección',
+        value: stats?.min ?? null,
+        sub: isGlobal ? 'Menor valor mensual de toda la serie' : 'Menor valor mensual visible',
+      };
+    case 'ratio_of_sums': {
+      const numeratorKey = String(indicator?.formula_numerator_key || '').trim();
+      const denominatorKey = String(indicator?.formula_denominator_key || '').trim();
+      const multiplier = indicator?.formula_multiplier === null || indicator?.formula_multiplier === undefined || indicator?.formula_multiplier === ''
+        ? 1
+        : Number(indicator.formula_multiplier);
+      const numerator = sumClean(years.flatMap(year => relatedSeriesMap?.[numeratorKey]?.[year] || []));
+      const denominator = sumClean(years.flatMap(year => relatedSeriesMap?.[denominatorKey]?.[year] || []));
+      return {
+        label: isGlobal ? 'Valor recalculado global' : 'Valor recalculado selección',
+        value: denominator ? (numerator / denominator) * multiplier : null,
+        sub: isGlobal ? 'Recalculado con toda la serie cargada' : 'Recalculado con numerador y denominador visibles',
+      };
+    }
+    case 'none':
+      return {
+        label: 'Medida anual oculta',
+        value: null,
+        sub: 'Sin valor principal por configuración',
+      };
+    default:
+      return {
+        label: annualMeta.shortLabel,
+        value: stats?.sum ?? null,
+        sub: periodLabel,
+      };
+  }
+}
+
+function getAppliedMetricHelpText(mode, isSingleYear = false) {
+  switch (mode) {
+    case 'sum':
+      return isSingleYear ? 'Suma de los meses del año' : 'Suma de los meses visibles';
+    case 'average':
+      return isSingleYear ? 'Promedio simple de los meses del año' : 'Promedio simple de los meses visibles';
+    case 'last_value':
+      return isSingleYear ? 'Último mes con dato del año' : 'Último mes con dato visible';
+    case 'max':
+      return isSingleYear ? 'Mayor valor mensual del año' : 'Mayor valor mensual visible';
+    case 'min':
+      return isSingleYear ? 'Menor valor mensual del año' : 'Menor valor mensual visible';
+    case 'ratio_of_sums':
+      return isSingleYear ? 'Recalculado con numerador y denominador del año' : 'Recalculado con numerador y denominador visibles';
+    case 'none':
+      return 'Sin valor principal por configuración';
+    default:
+      return 'Regla anual configurada para el indicador';
+  }
 }
 
 function getSelectedYearsLabel(selectedYears, availableYears) {
