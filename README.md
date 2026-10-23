@@ -118,3 +118,123 @@ La duplicación copia:
 - aclaraciones metodológicas
 
 No copia datos mensuales, observaciones puntuales ni marcas de dato provisorio. Esto evita contaminar el destino nuevo con valores del destino base.
+
+## Corrección de duplicación masiva de destinos
+
+Esta versión corrige un problema operativo que aparecía cuando la base acumulaba muchos indicadores:
+
+- la app ahora pagina la lectura completa de `indicators`, no solo el primer bloque devuelto por Supabase;
+- los destinos duplicados ya no deberían aparecer con 0 indicadores por lectura parcial;
+- la duplicación valida que se hayan copiado todos los indicadores esperados;
+- si una duplicación falla, se revierte el destino nuevo para no dejar destinos basura;
+- los destinos sin nombre se muestran como `Destino sin nombre` para poder identificarlos y editarlos;
+- se puede eliminar un destino aunque no tenga datos cargados. Si sus indicadores tampoco tienen datos, la app también elimina esos indicadores para no acumularlos en `Sin destino`.
+
+No requiere cambios nuevos de SQL.
+
+## Gestión de “Sin destino”
+
+El bucket **Sin destino** ahora se puede gestionar desde admin:
+
+- **Editar “Sin destino”** crea un destino real con el nombre indicado y mueve allí todos los indicadores sin destino.
+- **Eliminar “Sin destino”** borra completamente los indicadores sin destino y sus datos asociados.
+
+No requiere cambios de SQL.
+
+## Comparador más simple
+
+La comparación de destinos ahora muestra solo indicadores que existen en dos o más destinos. El selector ya no expone la clave/slug interna: muestra nombre limpio, unidad y cantidad de destinos disponibles.
+
+También se agregó:
+- buscador rápido de indicador comparable
+- agrupación visual por título agrupador
+- lista de destinos disponibles solo para el indicador elegido
+- botones para seleccionar todos o limpiar selección
+
+No requiere cambios de base de datos.
+
+## Mejora de visualización de gráficos densos
+
+Cuando hay muchos años seleccionados, la app ahora muestra el tooltip de forma individual, tomando el punto más cercano al cursor. Esto evita que se corte una lista enorme de valores sobre el gráfico.
+
+También se oculta automáticamente la leyenda interna cuando hay demasiadas series, porque los años ya se controlan desde los chips superiores. El gráfico gana altura cuando hay muchas líneas para mejorar la lectura.
+
+
+## Ordenamiento de tabla comparativa
+
+La tabla del comparador permite ordenar los destinos por el año que el usuario elija:
+
+- orden original por defecto;
+- mayor a menor;
+- menor a mayor;
+- los destinos sin dato para ese año quedan al final.
+
+Esta mejora es solo de visualización. No modifica registros, indicadores ni datos cargados.
+
+## Comparador: orden de tabla
+
+La tabla comparativa mantiene por defecto el orden original de selección. También permite elegir un año de referencia y decidir si se conserva ese orden original o si se ordena por rendimiento de mayor a menor o de menor a mayor. No modifica los datos cargados.
+
+## Comparador: medidas de tabla
+
+La tabla comparativa permite elegir qué medida mostrar por año:
+
+- medida anual aplicada por el indicador
+- promedio mensual
+- mediana mensual
+- máximo mensual del año
+- mínimo mensual del año
+- desvío estándar mensual
+
+El desvío estándar queda disponible como lectura avanzada de variabilidad/estacionalidad, pero no es la medida recomendada para ranking principal.
+
+## Comparador: medidas también en gráficos
+
+La medida seleccionada en la tabla comparativa ahora también controla el gráfico de comparación.
+Podés graficar la medida anual aplicada, promedio mensual, mediana, máximo, mínimo o desvío estándar mensual sin alterar los datos cargados.
+
+## v2.4.7.6 · Medidas por años seleccionados
+
+En la vista individual del indicador, los chips de años ahora también controlan el bloque de medidas:
+
+- muestra KPIs de la serie visible seleccionada
+- muestra una tabla con medidas individuales por cada año activo
+- mantiene un bloque separado de histórico global con todos los años cargados
+- no modifica datos, fórmulas ni estructura de Supabase
+
+## KPIs dinámicos por años visibles
+
+En la vista individual de cada indicador, los chips de años también controlan las medidas/KPIs.
+
+La primera tarjeta usa la regla anual configurada para el indicador:
+
+- `sum`: muestra el total del año o la suma de los años visibles.
+- `average`: muestra el promedio mensual del año o de la selección visible.
+- `last_value`: muestra el último valor con dato.
+- `max` / `min`: muestra el máximo o mínimo mensual del período visible.
+- `ratio_of_sums`: recalcula numerador / denominador × multiplicador con los años visibles.
+- `none`: mantiene la medida principal oculta.
+
+Esto permite que indicadores como viajeros, plazas ocupadas o habitaciones ocupadas muestren totales anuales, mientras que tasas, ocupación y estadía respetan su fórmula metodológica.
+
+## DestIQ v3 · Monitor público
+
+La vista pública fue reorganizada para priorizar lectura y comparación rápida, manteniendo Supabase y el panel administrativo existente.
+
+### Nueva arquitectura
+
+1. **Resumen**: último dato, variación mensual, variación interanual y último valor anual aplicado.
+2. **Períodos**: comparación directa entre dos meses o entre dos años, con diferencia absoluta y porcentual.
+3. **Evolución**: selección de años, KPIs, gráficos mensuales y valor anual.
+4. **Destinos**: comparación del mismo indicador entre destinos, respetando la fórmula anual configurada.
+5. **Datos**: estadísticas anuales, tabla mensual, notas metodológicas y observaciones.
+
+### Cambios de UX
+
+- portada de destino con panorama de últimos datos y variación interanual;
+- lectura ejecutiva automática al abrir un indicador;
+- buscador de destinos en la barra lateral;
+- navegación superior por preguntas de análisis;
+- exportación PNG del gráfico mensual, además de Excel y PDF;
+- diseño público responsive de alto contraste y lectura editorial;
+- el panel `pages/admin.html` conserva la misma estructura y backend.
