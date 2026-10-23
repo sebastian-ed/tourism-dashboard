@@ -1,0 +1,2 @@
+DestIQ v3.1 — Monitor turístico / administrador accesible en /destiq/admin.html
+Publicación: reemplazar todos los archivos de la raíz de la rama publicada.

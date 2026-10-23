@@ -1,0 +1,11 @@
+DESTIQ v3.1 — INSTALACIÓN CORRECTA EN GITHUB PAGES
+
+1) Abrí https://github.com/sebastian-ed/destiq
+2) Subí TODO el contenido de este ZIP a la raíz de la rama main (NO la carpeta contenedora).
+3) Confirmá que en la raíz de GitHub figuren index.html, admin.html, css/, js/ y pages/.
+4) En Settings > Pages, verificá Deploy from a branch, main, / (root).
+5) Revisá Actions > páginas para confirmar que la última publicación haya finalizado correctamente.
+6) Abrí https://sebastian-ed.github.io/destiq/?v=31 para minimizar problemas de caché.
+7) Acceso administrador: https://sebastian-ed.github.io/destiq/admin.html
+
+NOTA: subir un ZIP dentro del repositorio NO despliega los archivos que contiene. Es necesario extraerlos y subir su contenido. El rediseño no modifica los datos en Supabase ni necesita ejecutar SQL adicional.
